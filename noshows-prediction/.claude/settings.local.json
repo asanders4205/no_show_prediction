@@ -13,7 +13,10 @@
       "Bash(python3 -c \"import pyspark; print\\(pyspark.__version__\\)\")",
       "Bash(pip show *)",
       "Bash(pip3 show *)",
-      "Bash(conda run *)"
+      "Bash(conda run *)",
+      "Bash(python3 *)",
+      "Bash(git -C \"\\\\\\\\wsl.localhost\\\\Ubuntu\\\\home\\\\alecs\\\\projects\\\\no_show_prediction\\\\noshows-prediction\" status)",
+      "Bash(git -C \"\\\\\\\\wsl.localhost\\\\Ubuntu\\\\home\\\\alecs\\\\projects\\\\no_show_prediction\\\\noshows-prediction\" diff)"
     ]
   }
 }
