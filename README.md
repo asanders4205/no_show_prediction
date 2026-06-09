@@ -21,7 +21,9 @@ TargetEncoder uses the target variable to create a float value for the encoding 
 ## Dataset
 
 **Source:** [Kaggle healthcare-no-shows-appointments-dataset](https://www.kaggle.com/datasets/iamtanmayshukla/healthcare-no-shows-appointments-dataset)
+
 **Size:** ~107,000 rows of Brazilian healthcare appointment records  
+
 **Target:** `Showed_up` — 1 if the patient attended, 0 if they did not
 
 | Feature | Type | Description |
