@@ -18,7 +18,9 @@
       "Bash(git -C \"\\\\\\\\wsl.localhost\\\\Ubuntu\\\\home\\\\alecs\\\\projects\\\\no_show_prediction\\\\noshows-prediction\" status)",
       "Bash(git -C \"\\\\\\\\wsl.localhost\\\\Ubuntu\\\\home\\\\alecs\\\\projects\\\\no_show_prediction\\\\noshows-prediction\" diff)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git commit *)"
     ]
   }
 }
