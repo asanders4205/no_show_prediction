@@ -6,7 +6,7 @@ An end-to-end automated ML pipeline on Databricks that predicts whether patients
 
 ## Dataset
 
-**Source:** `noshows-prediction/input-datasets/healthcare_noshows.csv`  
+**Source:** [Kaggle healthcare-no-shows-appointments-dataset](https://www.kaggle.com/datasets/iamtanmayshukla/healthcare-no-shows-appointments-dataset)
 **Size:** ~107,000 rows of Brazilian healthcare appointment records  
 **Target:** `Showed_up` — 1 if the patient attended, 0 if they did not
 
@@ -110,3 +110,34 @@ noshows-prediction/
 4. The job will train, evaluate, register, and promote the model automatically.
 
 To schedule retraining, create a Databricks Job pointing to `ml_pipeline_agent.py` and set a cron trigger (e.g. weekly).
+
+
+
+
+## What I learned
+* Data ingestion in the Databricks Unity Catalog
+* Feature Engineering
+
+## Key decision points:
+### Feature Enginering; Encoding categorical variables
+Problem: When encoding string variables, the `Neighborhood` feature was causing the model to become too large. This is because there are 80+ distinct values for `Neighborhood` in this dataset. I used TargetEncoder for high-cardinality features, i.e. `Neighborhood`
+
+#### Tradeoffs of this approach
+TargetEncoder uses the target variable to create a float value for the encoding of the feature. This can cause leakage, so should only be used on the training dataset
+
+#### Result
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
