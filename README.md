@@ -2,19 +2,38 @@
 
 An end-to-end automated ML pipeline on Databricks that predicts whether patients will attend their scheduled medical appointments. The pipeline covers data loading, feature engineering, model training with hyperparameter tuning, MLflow experiment tracking, and automatic promotion of the best model to a production alias.
 
+## Key considerations
+This is a model for use in healthcare so I'm paying particular attention to Accuracy and Sensitivity.
+
 ---
 ## What I learned
 * Data ingestion in the Databricks Unity Catalog
 * Feature Engineering
 
 ## Key decision points:
-### Feature Enginering; Encoding categorical variables
-Problem: When encoding string variables, the `Neighborhood` feature was causing the model to become too large. This is because there are 80+ distinct values for `Neighborhood` in this dataset. I used TargetEncoder for high-cardinality features, i.e. `Neighborhood`
+1. Feature Enginering; Encoding categorical variables
+
+### Problem: When encoding string variables, the `Neighborhood` feature was causing the model to become too large. This is because there are 80+ distinct values for `Neighborhood` in this dataset.
+
+#### Solution: 
+I used TargetEncoder for high-cardinality features, i.e. `Neighborhood`
 
 #### Tradeoffs of this approach
 TargetEncoder uses the target variable to create a float value for the encoding of the feature. This can cause leakage, so should only be used on the training dataset
 
 #### Result
+TBD
+
+
+2. Class imbalance
+#### Problem
+The target variable has an 80/20 split; 80% of patients showed up for appointments and 20% did not.
+
+#### Solution:
+I added a `weight` column to penalize missed appointments
+
+
+
 
 
 
