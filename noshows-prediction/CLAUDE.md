@@ -54,9 +54,17 @@ CSV Load → Type Casting & Null Audit → Train/Test Split (80/20, seed=42)
 
 **CyclicalDateTransformer** (custom Spark Transformer in `ml_pipeline_agent.py`) is the key innovation — it encodes `ScheduledDay` and `AppointmentDay` as 12 cyclical features (sin/cos for month, day-of-year, day-of-week per date column), then drops the raw date columns. It runs first in the pipeline so the serialized model handles dates natively at inference time.
 
-**Categorical:** `Gender`, `Neighbourhood` → StringIndexer + OneHotEncoder (drop-last)
+**Categorical:**
+- `Gender` → StringIndexer + OneHotEncoder (2 values, OHE is fine)
+- `Neighborhood` → TargetEncoder (sklearn) — replaces each neighbourhood with its mean no-show rate on the training set. ~81 distinct values make OHE impractical. Must be fit on `train_df` only to avoid leakage.
 
-**Numerical (passed through as doubles):** `Age`, `Scholarship`, `Hipertension`, `Diabetes`, `Alcoholism`, `Handicap`, `SMS_received` + all 12 cyclical date features
+**Numerical (passed through as doubles):** `Age`, `Scholarship`, `Hypertension`, `Diabetes`, `Alcoholism`, `Handicap`, `SMS_received`, `date_diff` + all 12 cyclical date features
+
+**`date_diff`:** Days between scheduling and appointment date. Strong predictor — longer lead time correlates with higher no-show rate. Known at prediction time (no leakage).
+
+**Column renames (applied in notebook, must match in `ml_pipeline_agent.py`):**
+- `Neighbourhood` → `Neighborhood`
+- `Hipertension` → `Hypertension`
 
 **Dropped before training:** `PatientId`, `AppointmentID`
 
@@ -64,10 +72,20 @@ CSV Load → Type Casting & Null Audit → Train/Test Split (80/20, seed=42)
 
 ### Model
 
-- **Algorithm:** GBTClassifier
-- **Hyperparameter grid:** `maxDepth ∈ {3, 5}`, `maxIter ∈ {20, 50}` (4 combos)
-- **Selection:** 3-fold CrossValidator maximizing AUC
-- **Eval metrics logged:** AUC, Accuracy, F1, Precision (weighted), Recall (weighted)
+**Planned progression:** LogisticRegression (baseline) → RandomForestClassifier → GBTClassifier
+
+Each model is trained with the same train/test split, same features, same `weightCol`, and logged to the same MLflow experiment for direct comparison.
+
+**Primary metrics:** AUC (model comparison) + Recall on no-show class (healthcare sensitivity). Accuracy is not a primary metric due to class imbalance.
+
+**Class imbalance:** `weightCol` with weight ≈ 4.0 for no-shows (minority), 1.0 for shows. Ratio derived from training set counts.
+
+**Tuning strategy per model:**
+| Model | Tuning | Params |
+|---|---|---|
+| `LogisticRegression` | None — default params, establish baseline quickly | — |
+| `RandomForestClassifier` | CrossValidator 3-fold, 2×2 grid | `numTrees ∈ {50, 100}`, `maxDepth ∈ {5, 10}` |
+| `GBTClassifier` | CrossValidator 3-fold, 2×2 grid | `maxDepth ∈ {3, 5}`, `maxIter ∈ {20, 50}` |
 
 ### MLflow Integration
 
