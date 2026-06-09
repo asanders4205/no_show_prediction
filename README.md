@@ -3,6 +3,20 @@
 An end-to-end automated ML pipeline on Databricks that predicts whether patients will attend their scheduled medical appointments. The pipeline covers data loading, feature engineering, model training with hyperparameter tuning, MLflow experiment tracking, and automatic promotion of the best model to a production alias.
 
 ---
+## What I learned
+* Data ingestion in the Databricks Unity Catalog
+* Feature Engineering
+
+## Key decision points:
+### Feature Enginering; Encoding categorical variables
+Problem: When encoding string variables, the `Neighborhood` feature was causing the model to become too large. This is because there are 80+ distinct values for `Neighborhood` in this dataset. I used TargetEncoder for high-cardinality features, i.e. `Neighborhood`
+
+#### Tradeoffs of this approach
+TargetEncoder uses the target variable to create a float value for the encoding of the feature. This can cause leakage, so should only be used on the training dataset
+
+#### Result
+
+
 
 ## Dataset
 
@@ -110,23 +124,6 @@ noshows-prediction/
 4. The job will train, evaluate, register, and promote the model automatically.
 
 To schedule retraining, create a Databricks Job pointing to `ml_pipeline_agent.py` and set a cron trigger (e.g. weekly).
-
-
-
-
-## What I learned
-* Data ingestion in the Databricks Unity Catalog
-* Feature Engineering
-
-## Key decision points:
-### Feature Enginering; Encoding categorical variables
-Problem: When encoding string variables, the `Neighborhood` feature was causing the model to become too large. This is because there are 80+ distinct values for `Neighborhood` in this dataset. I used TargetEncoder for high-cardinality features, i.e. `Neighborhood`
-
-#### Tradeoffs of this approach
-TargetEncoder uses the target variable to create a float value for the encoding of the feature. This can cause leakage, so should only be used on the training dataset
-
-#### Result
-
 
 
 
