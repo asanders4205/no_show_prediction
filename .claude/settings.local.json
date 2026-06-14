@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(git checkout *)",
+      "Bash(git pull *)",
+      "Bash(git stash *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git config *)",
+      "Bash(wsl *)",
+      "Bash(claude plugin *)",
+      "Bash(cmd *)",
+      "Bash(python3 *)",
+      "Bash(python3 -c \"import pyspark; from pyspark.ml import types\")",
+      "Bash(python3 -c \"import pyspark; print\\(pyspark.__version__\\)\")",
+      "Bash(pip show *)",
+      "Bash(pip3 show *)",
+      "Bash(conda run *)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(Get-Content *)",
+      "PowerShell(git config *)",
+      "Read(//c/Users/alecs/.ssh/**)",
+      "Bash(ssh -T git@github.com)",
+      "Bash(echo \"exit: $?\")"
+    ]
+  }
+}
