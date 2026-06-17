@@ -11,3 +11,9 @@
 
 
 
+## 6/16 
+Found out how to connect VectorAssembler with the LinearRegression() function
+
+Also found out target variable needs to be of double datatype
+
+
