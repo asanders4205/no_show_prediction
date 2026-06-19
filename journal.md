@@ -17,3 +17,11 @@ Found out how to connect VectorAssembler with the LinearRegression() function
 Also found out target variable needs to be of double datatype
 
 
+
+
+# 6/19
+Have to remember to eval the model on the test set, not the train set. Looking forward to seeing these metrics and starting to assess tradeoffs.
+
+
+
+
