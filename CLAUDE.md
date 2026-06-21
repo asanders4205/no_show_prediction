@@ -30,6 +30,21 @@ The dataset path is hardcoded to the Databricks workspace:
 
 MLflow experiment: `/Users/asanders4205@gmail.com/noshows-pipeline-agent`
 
+## Dependency Management
+
+**`requirements.txt`** contains all Python dependencies not pre-installed on Databricks:
+
+```
+scikit-learn>=1.3.0  # For TargetEncoder
+pandas>=2.0.0        # Data manipulation
+```
+
+**Installation:**
+- **Notebooks:** Run `%pip install -r requirements.txt` in the first code cell (already added to `No-show prediction.ipynb`)
+- **Jobs/Scripts:** Add `%pip install -r requirements.txt` at the top of `ml_pipeline_agent.py`, or configure as a cluster init script
+
+**Note:** PySpark, MLflow, NumPy, and Matplotlib are pre-installed on Databricks and should NOT be added to `requirements.txt`.
+
 ## Pipeline Architecture
 
 ### End-to-End Flow
@@ -48,6 +63,7 @@ CSV Load → Type Casting & Null Audit → Train/Test Split (80/20, seed=42)
 | `ml_pipeline_agent.py` | Production pipeline — all stages from load to registry |
 | `No-show prediction.ipynb` | Full EDA and exploratory training workflow |
 | `No-show prediction dev.ipynb` | Development variant with extra validation |
+| `requirements.txt` | Python dependencies (scikit-learn, pandas) |
 | `input-datasets/healthcare_noshows.csv` | Raw data (~107K rows) |
 
 ### Feature Engineering

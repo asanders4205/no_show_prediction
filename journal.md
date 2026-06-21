@@ -23,5 +23,5 @@ Also found out target variable needs to be of double datatype
 Have to remember to eval the model on the test set, not the train set. Looking forward to seeing these metrics and starting to assess tradeoffs.
 
 
-
-
+### 6/20
+LR Model runs and produces metrics. Next step is to restructure the project. Then start logging runs in MLFlow. Then set up another model and compare with LR baseline.
