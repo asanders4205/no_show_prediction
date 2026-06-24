@@ -25,3 +25,9 @@ Have to remember to eval the model on the test set, not the train set. Looking f
 
 ### 6/20
 LR Model runs and produces metrics. Next step is to restructure the project. Then start logging runs in MLFlow. Then set up another model and compare with LR baseline.
+
+
+# 6/23
+Had a persistent bug: A name collision between my Pipeline model and Linear Regression model, and was getting tangled up in why I was passing the incorrect arguments to my (ambiguously named) model. The correct approach is to include the lr model in the stages of the Pipeline.
+
+I learned that a LogisticRegression object is a type of `Estimator` which may be added to a Pipeline. A pipeline can contain a model as a stage
