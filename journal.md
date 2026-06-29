@@ -31,3 +31,7 @@ LR Model runs and produces metrics. Next step is to restructure the project. The
 Had a persistent bug: A name collision between my Pipeline model and Linear Regression model, and was getting tangled up in why I was passing the incorrect arguments to my (ambiguously named) model. The correct approach is to include the lr model in the stages of the Pipeline.
 
 I learned that a LogisticRegression object is a type of `Estimator` which may be added to a Pipeline. A pipeline can contain a model as a stage
+
+# Monday 6/29
+Encountered Query Plan Inflation, had to write training split to a table in the unity catalog.
+Setting up MLFlow to track runs.
