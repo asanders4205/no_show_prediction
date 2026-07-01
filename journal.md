@@ -35,3 +35,13 @@ I learned that a LogisticRegression object is a type of `Estimator` which may be
 # Monday 6/29
 Encountered Query Plan Inflation, had to write training split to a table in the unity catalog.
 Setting up MLFlow to track runs.
+
+
+# 7/1
+Working with the BinaryClassificationEvaluator() class.
+Instantiate an object of this type, pass the Prediction columns, labels, and weights to it
+
+
+
+Finished logging precision, recall, f1, accuracy, and auc with MLFlow. Getting more comfortable reading PySpark documentation.
+
