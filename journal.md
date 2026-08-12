@@ -95,6 +95,9 @@ Results so far (from git history, journal.md, goals.md):
 - Note: the actual AUC/F1/recall/precision numbers live in the MLflow experiment UI on Databricks — they aren't captured in local repo files, so I can't quote specific values from what's on disk. Also worth flagging: README.md/CLAUDE.md describe a production ml_pipeline_agent.py script, but the repo currently only contains the two notebooks — that script doesn't exist yet, so the "production pipeline" description is aspirational, not current state.
 
 
+### 8/6
+Acheived baseline accuracy of 66% and recall of 66% with Logistic Regression. Random Forest performs worse. I'm not tuning hyperparamters; I think that may be the next step. I have my runs registered in MLflow.
+
 
 
 
