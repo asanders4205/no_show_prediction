@@ -98,7 +98,12 @@ Results so far (from git history, journal.md, goals.md):
 ### 8/6
 Acheived baseline accuracy of 66% and recall of 66% with Logistic Regression. Random Forest performs worse. I'm not tuning hyperparamters; I think that may be the next step. I have my runs registered in MLflow.
 
+### 8/12
+#### Baseline accuracy of 66% with Logistic Regression
+Baseline accuracy was 66% for Logistic regression, I'm going to try to raise it by scaling the numeric features. I saw that Epic has a sandbox for accessing mock patient data, I may use it in a later phase to make the project more realistic and more applicable to actual clinical data.
 
+#### Hyperparameter tuning
+Scaling the numeric features didn't seem to improve accuracy or recall, I think I'll have to start tuning hyperparameters
 
 
 
