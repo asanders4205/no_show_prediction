@@ -2,18 +2,15 @@
 
 An end-to-end automated ML pipeline on Databricks that predicts whether patients will attend their scheduled medical appointments. The pipeline covers data loading, feature engineering, model training with hyperparameter tuning, MLflow experiment tracking, and automatic promotion of the best model to a production alias.
 
-## Key considerations
-This is a model for use in healthcare so I'm paying particular attention to Accuracy and Sensitivity.
 
----
 ## What I learned
-* Data ingestion in the Databricks Unity Catalog
-* Feature Engineering
+See 'journal.md' for a full description and my though process during development
 
 ## Key decision points:
 1. Feature Enginering; Encoding categorical variables
 
-### Problem: When encoding string variables, the `Neighborhood` feature was causing the model to become too large. This is because there are 80+ distinct values for `Neighborhood` in this dataset.
+### Problem
+When encoding string variables, the `Neighborhood` feature was causing the model to become too large. This is because there are 80+ distinct values for `Neighborhood` in this dataset.
 
 #### Solution: 
 I used TargetEncoder for high-cardinality features, i.e. `Neighborhood`
@@ -63,7 +60,7 @@ I added a `weight` column to penalize missed appointments
 
 ---
 
-## Pipeline
+<!-- ## Pipeline
 
 ```
 Load CSV with explicit schema
@@ -85,7 +82,7 @@ Evaluate on test set (AUC, Accuracy, F1, Precision, Recall)
 MLflow: log params, metrics, feature schema, register model as `noshows_gbt`
         ↓
 Promote best version to @champion alias
-```
+``` -->
 
 ### Feature engineering details
 
@@ -93,7 +90,7 @@ Promote best version to @champion alias
 - **Categorical encoding** — `StringIndexer` followed by `OneHotEncoder` (drop-last) for `Gender` and `Neighbourhood`.
 - The `CyclicalDateTransformer` is the first stage in the serialised `Pipeline`, so the logged MLflow model artifact handles raw date columns at inference without any external preprocessing.
 
----
+<!-- ---
 
 ## Model
 
@@ -105,14 +102,14 @@ Promote best version to @champion alias
 | Selection metric | AUC (area under ROC) |
 | Random seed | 42 |
 
----
+--- -->
 
 ## MLflow & Model Registry
 
-- **Experiment:** `/Users/asanders4205@gmail.com/noshows-pipeline-agent`
-- **Registered model:** `noshows_gbt`
+- **Experiment:** `/Users/asanders4205@gmail.com/predict_no_show`
+- **Registered model:** `LogisticRegressionModel`, `RandomForestModel`
 - Each run logs params, 5 metrics, and a `feature_schema.json` artifact.
-- The best version from the run is tagged and promoted to the `@champion` alias.
+<!-- - The best version from the run is tagged and promoted to the `@champion` alias.
 
 Load the champion model for inference:
 
@@ -121,7 +118,7 @@ import mlflow.spark
 model = mlflow.spark.load_model("models:/noshows_gbt@champion")
 predictions = model.transform(new_data_df)
 ```
-
+ -->
 ---
 
 ## Files
@@ -137,21 +134,21 @@ noshows-prediction/
 
 ---
 
-## Running the pipeline
+<!-- ## Running the pipeline
 
 1. Upload the repo to your Databricks workspace.
 2. Update `DATASET_PATH` in `ml_pipeline_agent.py` to point to the CSV in your workspace.
 3. Run `ml_pipeline_agent.py` as a Databricks Job (or attach it to a cluster and run all cells).
 4. The job will train, evaluate, register, and promote the model automatically.
 
-To schedule retraining, create a Databricks Job pointing to `ml_pipeline_agent.py` and set a cron trigger (e.g. weekly).
+To schedule retraining, create a Databricks Job pointing to `ml_pipeline_agent.py` and set a cron trigger (e.g. weekly). -->
 
 
 
 
-
-
-
-
+### Work in progress
+* Hyperparameter tuning
+* More in-depth run logging
+* Promotion to `champion` alias
 
 

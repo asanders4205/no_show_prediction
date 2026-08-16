@@ -1,7 +1,7 @@
 ### Journal
 
 #### AI Disclaimer
-I used Claude Code to write 'boilerplate' code, provide direction, and help locate resources, up until the model logging portion of this project. Because this project is for deliberate practice and self-study, I used AI only in so far as I was comfortable with presenting this project as my own work.
+I used Claude Code to write boilerplate code, provide direction, and help locate resources, up until the model logging portion of this project. Because this project is for deliberate practice and self-study, I used AI only in so far as I was comfortable with presenting this project as my own work.
 
 In doing so I developed my skill of using AI as a learning resource instead of a crutch, while also accelerating development.
 
@@ -104,6 +104,8 @@ Baseline accuracy was 66% for Logistic regression, I'm going to try to raise it 
 
 #### Hyperparameter tuning
 Scaling the numeric features didn't seem to improve accuracy or recall, I think I'll have to start tuning hyperparameters
+* TBD which hyperparameters to tune
+* Basic setup is complete
 
 
 
