@@ -174,7 +174,10 @@ def validate_schema(df, expected_schema):
 # Declare bronze df
 bronze_df = spark.table("workspace.default.bronze_features")
 
-silver_df_validated = validate_schema(bronze_df,schemas.PATIENT_SCHEMA)
+expected_patient_schema = schemas.PATIENT_SCHEMA
+
+# Validate schema (raises exception if invalid)
+validate_schema(bronze_df, expected_patient_schema)
 
 # Format bronze, convert to silver
 silver_df_numerics_casted = cast_numeric_columns(bronze_df)
