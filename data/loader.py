@@ -17,7 +17,6 @@ def load_csv_to_df(folder_path, dataset_name):
 
     loaded_spark_df = spark.read.format("csv") \
         .option("header", "true") \
-        # .option("nullValue", "null") \
         .schema(schemas.PATIENT_SCHEMA) \
         .load(dataset_path)
 
@@ -36,7 +35,8 @@ def write_to_delta_table(spark_df, tbl_schema, tbl_name):
 
 # Entry Point (only runs when executed directly, not when imported as a package)
 if __name__ == "__main__":
-    dataset_folder = '/Workspace/Users/asanders4205@gmail.com/no_show_prediction/input-datasets/'
+    # dataset_folder = '/Workspace/Users/asanders4205@gmail.com/no_show_prediction/input-datasets/'
+    dataset_folder = '/Workspace/Users/asanders4205@gmail.com/no_show_prediction/data/input-datasets/'
     appointment_noshow_dataset = "healthcare_noshows.csv"
     
     bronze_features_df = load_csv_to_df(dataset_folder, appointment_noshow_dataset)
