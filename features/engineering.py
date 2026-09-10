@@ -3,13 +3,12 @@
 
 # Imports
 import math
-from pyspark.sql.functions import col, sin, cos, month, dayofweek, dayofyear, lit
-from sklearn.preprocessing import TargetEncoder
-from pyspark.sql.functions import col, create_map, lit
-from itertools import chain
 import pandas as pd
+from pyspark.sql.functions import col, sin, cos, month, dayofweek, dayofyear, lit, create_map, when
 from pyspark.ml.feature import OneHotEncoder, StringIndexer, VectorAssembler, MinMaxScaler
+from sklearn.preprocessing import TargetEncoder
 from pyspark.ml import Pipeline
+from itertools import chain
 
 # Functions
 ''' train_test_split()
@@ -147,6 +146,47 @@ def fit_encoder_on_models(train_df,test_df):
 
 
 
+''' scale_datasets()
+    Purpose: Apply MinMaxScaler to train and test sets
+    Parameters
+    Return
+'''
+def scale_datasets(train_df,test_df):
+    # Fit scaler on TRAIN only to prevent leakage
+    scaler = MinMaxScaler(inputCol="features", outputCol="scaledFeatures")
+    scalerModel = scaler.fit(train_assembled)
+
+
+    # Transform both splits
+    train_scaled = scalerModel.transform(train_assembled)
+    test_scaled = scalerModel.transform(test_assembled)
+
+    return train_scaled, test_scaled
+
+
+
+''' apply_class_weights()
+    Purpose: Handle class imbalance; Find count of no-show appointments and count of show appointments. find quotient and make weights.
+'''
+def apply_class_weights(train_scaled, test_scaled):
+
+    no_show_count = train_scaled.filter(col("Showed_up") == 0).count()
+    show_count = train_scaled.filter(col("Showed_up") == 1).count()
+    total_count = train_scaled.count()
+
+    WEIGHT_SHOWED_UP = 1.0
+    WEIGHT_NO_SHOW = show_count / no_show_count
+
+    train_scaled_with_weight = train_scaled.withColumn(
+        "weightCol",
+        when(col("Showed_up") == 1, WEIGHT_SHOWED_UP).
+        otherwise(WEIGHT_NO_SHOW)
+    )
+
+    return train_scaled_with_weight, test_scaled
+
+
+
 
 
 # Entry point
@@ -179,19 +219,48 @@ train_df, test_df = fit_indexer_on_models(train_df,test_df)
 train_df, test_df = fit_encoder_on_models(train_df,test_df)
 
 
+# Assemble features for both splits
+vector_assembler = VectorAssembler(
+    inputCols=numerical_cols,
+    outputCol="features",
+    handleInvalid="skip",
+)
+
+
+train_assembled = vector_assembler.transform(train_df)
+test_assembled = vector_assembler.transform(test_df)
 
 
 
+train_scaled, test_scaled = scale_datasets(train_assembled,test_assembled)
+
+# Handle class imbalance
+# Find count of no-show appointments and count of show appointments. find quotient and make weights.
+train_scaled, test_scaled = apply_class_weights(train_scaled, test_scaled)
 
 
+''' apply_class_weights()
+    Purpose: Handle class imbalance; Find count of no-show appointments and count of show appointments. find quotient and make weights.
+'''
+def apply_class_weights(train_scaled, test_scaled):
+
+    no_show_count = train_scaled.filter(col("Showed_up") == 0).count()
+    show_count = train_scaled.filter(col("Showed_up") == 1).count()
+    total_count = train_scaled.count()
+
+    WEIGHT_SHOWED_UP = 1.0
+    WEIGHT_NO_SHOW = show_count / no_show_count
 
 
+    from pyspark.sql.functions import when
 
+    train_scaled_with_weight = train_scaled.withColumn(
+        "weightCol",
+        when(col("Showed_up") == 1, WEIGHT_SHOWED_UP).
+        otherwise(WEIGHT_NO_SHOW)
+    )
 
-
-
-
-
+    return train_scaled_with_weight
 
 
 
