@@ -171,25 +171,27 @@ def validate_schema(df, expected_schema):
     
 
 
-# Declare bronze df
-bronze_df = spark.table("workspace.default.bronze_features")
+# Entry point - only runs when executed directly, not when imported
+if __name__ == "__main__":
+    # Declare bronze df
+    bronze_df = spark.table("workspace.default.bronze_features")
 
-expected_patient_schema = schemas.PATIENT_SCHEMA
+    expected_patient_schema = schemas.PATIENT_SCHEMA
 
-# Validate schema (raises exception if invalid)
-validate_schema(bronze_df, expected_patient_schema)
+    # Validate schema (raises exception if invalid)
+    validate_schema(bronze_df, expected_patient_schema)
 
-# Format bronze, convert to silver
-silver_df_numerics_casted = cast_numeric_columns(bronze_df)
+    # Format bronze, convert to silver
+    silver_df_numerics_casted = cast_numeric_columns(bronze_df)
 
-# Drop columns with many nulls
-silver_df_nonulls = drop_null_columns(silver_df_numerics_casted)
+    # Drop columns with many nulls
+    silver_df_nonulls = drop_null_columns(silver_df_numerics_casted)
 
-# Add unique ID
-silver_df = add_unique_id(silver_df_nonulls)
+    # Add unique ID
+    silver_df = add_unique_id(silver_df_nonulls)
 
-# Write to delta table
-silver_df.write.mode("overwrite") \
-    .option("overwriteSchema", "true") \
-    .saveAsTable("default.silver_no_show_features"
-)
+    # Write to delta table
+    silver_df.write.mode("overwrite") \
+        .option("overwriteSchema", "true") \
+        .saveAsTable("default.silver_no_show_features"
+    )
