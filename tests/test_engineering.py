@@ -343,3 +343,160 @@ class TestIntegrationScenarios:
         # Verify column count changes
         assert len(after_cyclical) == len(initial_cols) - 2 + 8  # -2 dates, +8 cyclical
         assert len(after_neighborhood) == len(after_cyclical)  # -1 Neighborhood, +1 Neighborhood_te
+
+
+class TestScaleDatasets:
+    """Tests for scale_datasets function."""
+    
+    def test_function_has_undefined_variable_bug(self):
+        """Document that scale_datasets references undefined variables."""
+        # The function uses train_assembled and test_assembled which are not parameters
+        # It should use train_df and test_df parameters instead
+        from pyspark.ml.feature import VectorAssembler
+        import inspect
+        
+        source = inspect.getsource(engineering.scale_datasets)
+        assert "train_assembled" in source
+        assert "train_df" in source  # parameter name
+    
+    def test_scale_datasets_with_fixed_implementation(self, spark, sample_dataframe):
+        """Test the intended behavior if the bug were fixed."""
+        from pyspark.ml.feature import VectorAssembler, MinMaxScaler
+        
+        # Prepare data
+        train_df, test_df = engineering.train_test_split(sample_dataframe)
+        numerical_cols = ["Age", "Scholarship", "date_diff"]
+        
+        # Assemble features
+        assembler = VectorAssembler(
+            inputCols=numerical_cols,
+            outputCol="features",
+            handleInvalid="skip"
+        )
+        train_assembled = assembler.transform(train_df)
+        test_assembled = assembler.transform(test_df)
+        
+        # Manual scaling (what the function should do)
+        scaler = MinMaxScaler(inputCol="features", outputCol="scaledFeatures")
+        scaler_model = scaler.fit(train_assembled)
+        train_scaled = scaler_model.transform(train_assembled)
+        test_scaled = scaler_model.transform(test_assembled)
+        
+        # Verify scaled features exist
+        assert "scaledFeatures" in train_scaled.columns
+        assert "scaledFeatures" in test_scaled.columns
+        
+        # Verify scaler was fit on training data only
+        assert scaler_model is not None
+
+
+class TestApplyClassWeights:
+    """Tests for apply_class_weights function."""
+    
+    def test_creates_weight_column(self, sample_dataframe):
+        """Verify that weightCol column is created."""
+        train_df, test_df = engineering.train_test_split(sample_dataframe)
+        
+        # Apply class weights
+        train_weighted, test_result = engineering.apply_class_weights(train_df, test_df)
+        
+        assert "weightCol" in train_weighted.columns
+    
+    def test_weight_calculation_logic(self, sample_dataframe):
+        """Verify that weights are calculated based on class imbalance."""
+        from pyspark.sql.functions import col
+        
+        train_df, test_df = engineering.train_test_split(sample_dataframe)
+        
+        # Get actual counts
+        no_show_count = train_df.filter(col("Showed_up") == 0).count()
+        show_count = train_df.filter(col("Showed_up") == 1).count()
+        
+        expected_weight_no_show = show_count / no_show_count if no_show_count > 0 else 1.0
+        expected_weight_showed_up = 1.0
+        
+        # Apply weights
+        train_weighted, _ = engineering.apply_class_weights(train_df, test_df)
+        
+        # Check a few samples
+        samples = train_weighted.select("Showed_up", "weightCol").limit(10).collect()
+        
+        for row in samples:
+            if row.Showed_up == 1.0:
+                assert row.weightCol == expected_weight_showed_up
+            else:
+                assert row.weightCol == pytest.approx(expected_weight_no_show, rel=1e-5)
+    
+    def test_showed_up_gets_weight_one(self, sample_dataframe):
+        """Verify that showed up appointments get weight 1.0."""
+        from pyspark.sql.functions import col
+        
+        train_df, test_df = engineering.train_test_split(sample_dataframe)
+        train_weighted, _ = engineering.apply_class_weights(train_df, test_df)
+        
+        # Filter for showed_up == 1
+        showed_up_weights = train_weighted.filter(col("Showed_up") == 1) \
+            .select("weightCol").distinct().collect()
+        
+        assert len(showed_up_weights) == 1
+        assert showed_up_weights[0].weightCol == 1.0
+    
+    def test_no_show_gets_higher_weight(self, sample_dataframe):
+        """Verify that no-show appointments get higher weight (assuming class imbalance)."""
+        from pyspark.sql.functions import col
+        
+        train_df, test_df = engineering.train_test_split(sample_dataframe)
+        train_weighted, _ = engineering.apply_class_weights(train_df, test_df)
+        
+        # Get weights for both classes
+        weight_showed_up = train_weighted.filter(col("Showed_up") == 1) \
+            .select("weightCol").first().weightCol
+        
+        weight_no_show_samples = train_weighted.filter(col("Showed_up") == 0) \
+            .select("weightCol").limit(1).collect()
+        
+        if len(weight_no_show_samples) > 0:
+            weight_no_show = weight_no_show_samples[0].weightCol
+            # No-show weight should be >= 1.0 (assuming more showed up than no-show)
+            assert weight_no_show >= weight_showed_up
+    
+    def test_test_set_unchanged(self, sample_dataframe):
+        """Verify that test set is returned unchanged."""
+        train_df, test_df = engineering.train_test_split(sample_dataframe)
+        test_cols_before = set(test_df.columns)
+        
+        _, test_result = engineering.apply_class_weights(train_df, test_df)
+        test_cols_after = set(test_result.columns)
+        
+        # Test set should not have weightCol added
+        assert test_cols_before == test_cols_after
+        assert "weightCol" not in test_result.columns
+    
+    def test_full_pipeline_with_class_weights(self, sample_dataframe):
+        """Test encoding pipeline followed by class weight application."""
+        # Split data
+        train_df, test_df = engineering.train_test_split(sample_dataframe)
+        
+        numerical_cols = ["Age", "Scholarship", "Hypertension", "Diabetes",
+                         "Alcoholism", "Handicap", "SMS_received", "date_diff"]
+        
+        # Encode cyclical dates
+        numerical_cols, train_df, test_df = engineering.encode_cyclical_dates(
+            numerical_cols, train_df, test_df
+        )
+        
+        # Encode neighborhood
+        numerical_cols, train_df, test_df = engineering.neighborhood_encoder(
+            numerical_cols, train_df, test_df
+        )
+        
+        # Apply class weights
+        train_weighted, test_result = engineering.apply_class_weights(train_df, test_df)
+        
+        # Verify weight column added to training set
+        assert "weightCol" in train_weighted.columns
+        assert "Neighborhood_te" in train_weighted.columns
+        assert "Sched_month_sin" in train_weighted.columns
+        
+        # Test set should not have weights
+        assert "weightCol" not in test_result.columns

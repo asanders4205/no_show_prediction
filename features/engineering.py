@@ -154,12 +154,12 @@ def fit_encoder_on_models(train_df,test_df):
 def scale_datasets(train_df,test_df):
     # Fit scaler on TRAIN only to prevent leakage
     scaler = MinMaxScaler(inputCol="features", outputCol="scaledFeatures")
-    scalerModel = scaler.fit(train_assembled)
+    scalerModel = scaler.fit(train_df)
 
 
     # Transform both splits
-    train_scaled = scalerModel.transform(train_assembled)
-    test_scaled = scalerModel.transform(test_assembled)
+    train_scaled = scalerModel.transform(train_df)
+    test_scaled = scalerModel.transform(test_df)
 
     return train_scaled, test_scaled
 
@@ -189,82 +189,52 @@ def apply_class_weights(train_scaled, test_scaled):
 
 
 
-# Entry point
-silver_df = spark.table("workspace.default.silver_no_show_features")
+# Entry point - only runs when executed directly, not when imported
+if __name__ == "__main__":
+    silver_df = spark.table("workspace.default.silver_no_show_features")
 
-train_df, test_df = train_test_split(silver_df)
+    train_df, test_df = train_test_split(silver_df)
 
-# TODO: These should not be hard coded
-# Base numeric features (cast to double, IDs and target excluded)
-numerical_cols = ["Age", "Scholarship", "Hypertension", "Diabetes",
-                  "Alcoholism", "Handicap", "SMS_received", "date_diff"]
-
-
-# Encode cyclical dates
-numerical_cols, train_df, test_df = encode_cyclical_dates(numerical_cols, train_df, test_df)
+    # TODO: These should not be hard coded
+    # Base numeric features (cast to double, IDs and target excluded)
+    numerical_cols = ["Age", "Scholarship", "Hypertension", "Diabetes",
+                      "Alcoholism", "Handicap", "SMS_received", "date_diff"]
 
 
-# Encode neighborhood before scaling
-numerical_cols, train_df, test_df = neighborhood_encoder(numerical_cols, train_df, test_df)
+    # Encode cyclical dates
+    numerical_cols, train_df, test_df = encode_cyclical_dates(numerical_cols, train_df, test_df)
 
 
-# Encode gender
-numerical_cols = gender_encoder(numerical_cols)
-
-# Fit indexer
-train_df, test_df = fit_indexer_on_models(train_df,test_df)
+    # Encode neighborhood before scaling
+    numerical_cols, train_df, test_df = neighborhood_encoder(numerical_cols, train_df, test_df)
 
 
-# Fit encoder
-train_df, test_df = fit_encoder_on_models(train_df,test_df)
+    # Encode gender
+    numerical_cols = gender_encoder(numerical_cols)
+
+    # Fit indexer
+    train_df, test_df = fit_indexer_on_models(train_df,test_df)
 
 
-# Assemble features for both splits
-vector_assembler = VectorAssembler(
-    inputCols=numerical_cols,
-    outputCol="features",
-    handleInvalid="skip",
-)
+    # Fit encoder
+    train_df, test_df = fit_encoder_on_models(train_df,test_df)
 
 
-train_assembled = vector_assembler.transform(train_df)
-test_assembled = vector_assembler.transform(test_df)
-
-
-
-train_scaled, test_scaled = scale_datasets(train_assembled,test_assembled)
-
-# Handle class imbalance
-# Find count of no-show appointments and count of show appointments. find quotient and make weights.
-train_scaled, test_scaled = apply_class_weights(train_scaled, test_scaled)
-
-
-''' apply_class_weights()
-    Purpose: Handle class imbalance; Find count of no-show appointments and count of show appointments. find quotient and make weights.
-'''
-def apply_class_weights(train_scaled, test_scaled):
-
-    no_show_count = train_scaled.filter(col("Showed_up") == 0).count()
-    show_count = train_scaled.filter(col("Showed_up") == 1).count()
-    total_count = train_scaled.count()
-
-    WEIGHT_SHOWED_UP = 1.0
-    WEIGHT_NO_SHOW = show_count / no_show_count
-
-
-    from pyspark.sql.functions import when
-
-    train_scaled_with_weight = train_scaled.withColumn(
-        "weightCol",
-        when(col("Showed_up") == 1, WEIGHT_SHOWED_UP).
-        otherwise(WEIGHT_NO_SHOW)
+    # Assemble features for both splits
+    vector_assembler = VectorAssembler(
+        inputCols=numerical_cols,
+        outputCol="features",
+        handleInvalid="skip",
     )
 
-    return train_scaled_with_weight
+
+    train_assembled = vector_assembler.transform(train_df)
+    test_assembled = vector_assembler.transform(test_df)
 
 
 
+    train_scaled, test_scaled = scale_datasets(train_assembled,test_assembled)
 
-
-
-
+    # Handle class imbalance
+    # Find count of no-show appointments and count of show appointments. find quotient and make weights.
+    train_scaled, test_scaled = apply_class_weights(train_scaled, test_scaled)
