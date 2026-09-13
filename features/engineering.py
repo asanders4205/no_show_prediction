@@ -104,16 +104,19 @@ def neighborhood_encoder(numerical_cols, train_df, test_df):
 
 ''' gender_encoder() 
     Purpose: Encode gender to numeric vector
-    Return: Numeric vector with values representing gender
+    Return:
+        numerical_cols_with_gender - Numeric vector with values representing gender
+        indexer - String indices included 
+        encoder - Object after one-hot encoding
 '''
 def gender_encoder(numerical_cols):
     # Encode only the 'Gender' column
     indexer = StringIndexer(inputCol="Gender", outputCol="Gender_index", handleInvalid="skip")
     encoder = OneHotEncoder(inputCol="Gender_index", outputCol="Gender_vec")
 
-    numerical_cols_with_gender += ["Gender_vec"]
+    numerical_cols_with_gender = numerical_cols + ["Gender_vec"]
 
-    return numerical_cols_with_gender
+    return numerical_cols_with_gender, indexer, encoder
 
 
 
@@ -122,7 +125,7 @@ def gender_encoder(numerical_cols):
     Param:
     Return:
 '''
-def fit_indexer_on_models(train_df,test_df):
+def fit_indexer_on_models(train_df,test_df, indexer):
     indexer_model = indexer.fit(train_df)
     train_df_indexed = indexer_model.transform(train_df)
     test_df_indexed = indexer_model.transform(test_df)
@@ -136,7 +139,7 @@ def fit_indexer_on_models(train_df,test_df):
     Param:
     Return:
 '''
-def fit_encoder_on_models(train_df,test_df):
+def fit_encoder_on_models(train_df,test_df, encoder):
     # Fit encoder on train, transform both train and test
     encoder_model = encoder.fit(train_df)
     train_df_encoded = encoder_model.transform(train_df)
@@ -210,14 +213,14 @@ if __name__ == "__main__":
 
 
     # Encode gender
-    numerical_cols = gender_encoder(numerical_cols)
+    numerical_cols, indexer, encoder = gender_encoder(numerical_cols)
 
     # Fit indexer
-    train_df, test_df = fit_indexer_on_models(train_df,test_df)
+    train_df, test_df = fit_indexer_on_models(train_df, test_df, indexer)
 
 
     # Fit encoder
-    train_df, test_df = fit_encoder_on_models(train_df,test_df)
+    train_df, test_df = fit_encoder_on_models(train_df,test_df, encoder)
 
 
     # Assemble features for both splits
