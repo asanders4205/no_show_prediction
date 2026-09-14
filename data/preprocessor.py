@@ -1,5 +1,18 @@
 # Modularization of the `preprocessing` Notebook
 
+from pyspark.sql.types import IntegerType, BooleanType
+from pyspark.sql import functions as F
+from pyspark.sql.functions import (
+    col,
+    when,
+    sum as spark_sum,
+    monotonically_increasing_id,
+) # End import
+import schemas
+
+
+
+
 """cast_numeric_columns()
 Purpose: Convert numeric (integer and numeric-typed boolean) columns to double
 Output: TBD
@@ -80,31 +93,105 @@ def add_unique_id(df):
     return df
 
 
-from pyspark.sql.types import IntegerType, BooleanType
-from pyspark.sql import functions as F
-from pyspark.sql.functions import (
-    col,
-    when,
-    sum as spark_sum,
-    monotonically_increasing_id,
-) # End import
+
+''' validate_schema()
+    Purpose: Validate correctness of incoming data against established schema
+    Return: Tuple (is_valid: bool, errors: list)
+'''
+def validate_schema(df, expected_schema):
+    """
+    Validates that the incoming DataFrame matches the expected schema.
+    
+    Args:
+        df: Input PySpark DataFrame
+        expected_schema: Expected StructType schema from schemas.py
+    
+    Returns:
+        Tuple of (is_valid: bool, errors: list of error messages)
+    """
+    errors = []
+    
+    # Get actual schema
+    actual_schema = df.schema
+    actual_fields = {field.name: field for field in actual_schema.fields}
+    expected_fields = {field.name: field for field in expected_schema.fields}
+    
+    # Check for missing columns
+    missing_cols = set(expected_fields.keys()) - set(actual_fields.keys())
+    if missing_cols:
+        errors.append(f"Missing required columns: {sorted(missing_cols)}")
+    
+    # Check for unexpected columns
+    extra_cols = set(actual_fields.keys()) - set(expected_fields.keys())
+    if extra_cols:
+        errors.append(f"Unexpected columns found: {sorted(extra_cols)}")
+    
+    # Check data types for matching columns
+    for col_name in expected_fields.keys():
+        if col_name in actual_fields:
+            expected_type = expected_fields[col_name].dataType
+            actual_type = actual_fields[col_name].dataType
+            
+            if expected_type != actual_type:
+                errors.append(
+                    f"Column '{col_name}' type mismatch: "
+                    f"expected {expected_type}, got {actual_type}"
+                )
+    
+    # Check nullability for matching columns
+    for col_name in expected_fields.keys():
+        if col_name in actual_fields:
+            expected_nullable = expected_fields[col_name].nullable
+            actual_nullable = actual_fields[col_name].nullable
+            
+            # Only raise error if expected is non-nullable but actual is nullable
+            if not expected_nullable and actual_nullable:
+                errors.append(
+                    f"Column '{col_name}' should be non-nullable but is nullable"
+                )
+    
+    is_valid = len(errors) == 0
+    
+    # Print validation results
+    if is_valid:
+        print("✓ Schema validation passed successfully")
+    else:
+        print("✗ SCHEMA VALIDATION FAILED")
+        print("=" * 60)
+        for i, error in enumerate(errors, 1):
+            print(f"{i}. {error}")
+        print("=" * 60)
+        # Raise exception to halt processing
+        raise ValueError(
+            f"Schema validation failed with {len(errors)} error(s). "
+            "See above for details."
+        )
+    
+    return is_valid, errors
+    
 
 
+# Entry point - only runs when executed directly, not when imported
+if __name__ == "__main__":
+    # Declare bronze df
+    bronze_df = spark.table("workspace.default.bronze_features")
 
-# Declare bronze df
-bronze_df = spark.table("workspace.default.bronze_features")
+    expected_patient_schema = schemas.PATIENT_SCHEMA
 
-# Format bronze, convert to silver
-silver_df_numerics_casted = cast_numeric_columns(bronze_df)
+    # Validate schema (raises exception if invalid)
+    validate_schema(bronze_df, expected_patient_schema)
 
-# Drop columns with many nulls
-silver_df_nonulls = drop_null_columns(silver_df_numerics_casted)
+    # Format bronze, convert to silver
+    silver_df_numerics_casted = cast_numeric_columns(bronze_df)
 
-# Add unique ID
-silver_df = add_unique_id(silver_df_nonulls)
+    # Drop columns with many nulls
+    silver_df_nonulls = drop_null_columns(silver_df_numerics_casted)
 
-# Write to delta table
-silver_df.write.mode("overwrite") \
-    .option("overwriteSchema", "true") \
-    .saveAsTable("default.silver_no_show_features"
-)
+    # Add unique ID
+    silver_df = add_unique_id(silver_df_nonulls)
+
+    # Write to delta table
+    silver_df.write.mode("overwrite") \
+        .option("overwriteSchema", "true") \
+        .saveAsTable("default.silver_no_show_features"
+    )
