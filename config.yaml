@@ -1,0 +1,8 @@
+dataset_path: "/Volumes/workspace/default/no_show_volume/healthcare_noshows.csv"
+
+mlflow:
+  experiment_path: "/Users/asanders4205@gmail.com/no-show-prediction"
+
+model_output_path: "workspace/default/models"
+
+random_seed: 42

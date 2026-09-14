@@ -1,7 +1,7 @@
 import pandas as pd
 from pyspark.sql.functions import col
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DateType, BooleanType
-
+import yaml, os
 import schemas
 
 
@@ -31,20 +31,46 @@ def load_csv_to_df(folder_path, dataset_name):
 '''
 def write_to_delta_table(spark_df, tbl_schema, tbl_name):
     spark_df.write.mode("overwrite").saveAsTable(f"{tbl_schema}.{tbl_name}")
+    return None
+
+''' 
+    Purpose: Load in config yaml file
+    Return: The dataset path in UC
+'''
+def load_config_yaml():
+    config_file = "../config.yaml" if os.path.exists("../config.yaml") else "config.example.yaml"
+
+    with open(config_file) as f:
+        cfg = yaml.safe_load(f)
+    dataset_path = cfg["dataset_path"]
+
+    return dataset_path
+
+
+
 
 
 # Entry Point (only runs when executed directly, not when imported as a package)
 if __name__ == "__main__":
     # dataset_folder = '/Workspace/Users/asanders4205@gmail.com/no_show_prediction/input-datasets/'
-    dataset_folder = '/Workspace/Users/asanders4205@gmail.com/no_show_prediction/data/input-datasets/'
-    appointment_noshow_dataset = "healthcare_noshows.csv"
+    # dataset_folder = '/Workspace/Users/asanders4205@gmail.com/no_show_prediction/data/input-datasets/'
+    # appointment_noshow_dataset = "healthcare_noshows.csv"
     
-    bronze_features_df = load_csv_to_df(dataset_folder, appointment_noshow_dataset)
+
+    # Get yaml file path from defined function
+    dataset_path = load_config_yaml()
+
+    # Load from CSV
+    # bronze_features_df = load_csv_to_df(dataset_folder, appointment_noshow_dataset)
+
+    # Load from YAML filepath
+    bronze_features_df = spark.read.format("csv") \
+        .option("header", "true") \
+        .option("inferSchema", "true") \
+        .load(dataset_path)   
     
     # Write to delta table
     write_to_delta_table(bronze_features_df, "default", "bronze_features")
-
-
 
 
 
