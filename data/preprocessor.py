@@ -9,8 +9,7 @@ from pyspark.sql.functions import (
     monotonically_increasing_id,
 ) # End import
 import schemas
-
-
+import yaml, os
 
 
 """cast_numeric_columns()
@@ -168,13 +167,45 @@ def validate_schema(df, expected_schema):
         )
     
     return is_valid, errors
-    
+
+''' load_tbl_from_config
+    Purpose: Return table loaded from file path in config file
+    Parameter: Object path, passed as string
+    Return: Spark dataframe containing bronze features, loaded from Unity Catalog table, at location
+        specified in the config.yaml file
+'''
+def load_tbl_from_config(object_name):
+    config_file = "../config.yaml" if os.path.exists("../config.yaml") else "config.example.yaml"
+
+    with open(config_file) as f:
+        cfg = yaml.safe_load(f)
+    table_path = cfg[object_name]
+
+    return spark.table(table_path)
 
 
 # Entry point - only runs when executed directly, not when imported
 if __name__ == "__main__":
     # Declare bronze df
-    bronze_df = spark.table("workspace.default.bronze_features")
+    # bronze_df = spark.table("workspace.default.bronze_features")
+
+
+    # Load from config file
+    bronze_df = load_tbl_from_config("bronze_table_path")
+
+    # Apply column renames to match expected schema
+    column_renames = {
+        "Neighbourhood": "Neighborhood",
+        "Hipertension": "Hypertension",
+        "Handcap": "Handicap",
+        "Date.diff": "date_diff"
+    }
+    for old_name, new_name in column_renames.items():
+        if old_name in bronze_df.columns:
+            bronze_df = bronze_df.withColumnRenamed(old_name, new_name)
+    
+    # Cast PatientId to integer to match expected schema
+    bronze_df = bronze_df.withColumn("PatientId", col("PatientId").try_cast("integer"))
 
     expected_patient_schema = schemas.PATIENT_SCHEMA
 

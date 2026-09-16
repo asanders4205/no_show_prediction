@@ -1,4 +1,4 @@
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DateType, BooleanType
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DateType, BooleanType, DoubleType
 
 RAW_COLUMN_RENAMES = {
     "Neighbourhood": "Neighborhood",
