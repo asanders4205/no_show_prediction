@@ -12,7 +12,7 @@ test_scaled_dataset_path: "workspace.default.no_show_test_scaled_tbl"
 
 lr_model_path: "workspace.default.noshows_logistic_regression"
 
-rf_model_path: "workspace.default.noshows_random_forest""
+rf_model_path: "workspace.default.noshows_random_forest"
 
 
 mlflow:
