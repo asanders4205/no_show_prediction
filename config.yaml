@@ -2,16 +2,16 @@ volume_path: "/Volumes/workspace/default/no_show_volume"
 
 dataset_path: "/Volumes/workspace/default/no_show_volume/healthcare_noshows.csv"
 
+# Tables
 bronze_table_path: "workspace.default.bronze_features"
-
 silver_table_path: "workspace.default.silver_no_show_features"
 
+# Scaled datasets
 train_scaled_dataset_path: "workspace.default.no_show_train_scaled_tbl"
-
 test_scaled_dataset_path: "workspace.default.no_show_test_scaled_tbl"
 
+# Models
 lr_model_path: "workspace.default.noshows_logistic_regression"
-
 rf_model_path: "workspace.default.noshows_random_forest"
 
 

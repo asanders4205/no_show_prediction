@@ -9,6 +9,7 @@ from pyspark.ml.feature import OneHotEncoder, StringIndexer, VectorAssembler, Mi
 from sklearn.preprocessing import TargetEncoder
 from pyspark.ml import Pipeline
 from itertools import chain
+import os, yaml
 
 # Functions
 ''' train_test_split()
@@ -190,11 +191,30 @@ def apply_class_weights(train_scaled, test_scaled):
 
 
 
+''' load_tbl_from_config
+    Purpose: Return table loaded from file path in config file
+    Parameter: Object path, passed as string
+    Return: Spark dataframe containing bronze features, loaded from Unity Catalog table, at location
+        specified in the config.yaml file
+'''
+def load_tbl_from_config(object_name):
+    config_file = "../config.yaml" if os.path.exists("../config.yaml") else "config.example.yaml"
+
+    with open(config_file) as f:
+        cfg = yaml.safe_load(f)
+    table_path = cfg[object_name]
+
+    return spark.table(table_path)
+
+
 
 
 # Entry point - only runs when executed directly, not when imported
 if __name__ == "__main__":
-    silver_df = spark.table("workspace.default.silver_no_show_features")
+
+    silver_df = load_tbl_from_config("silver_table_path")
+
+    # silver_df = spark.table(silver_table_path)
 
     train_df, test_df = train_test_split(silver_df)
 

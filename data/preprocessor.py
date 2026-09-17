@@ -226,3 +226,8 @@ if __name__ == "__main__":
         .option("overwriteSchema", "true") \
         .saveAsTable("default.silver_no_show_features"
     )
+    
+    # Make ID Non-nullable, and set to primary key
+    spark.sql("ALTER TABLE default.silver_no_show_features ALTER COLUMN record_id SET NOT NULL")
+    spark.sql("ALTER TABLE default.silver_no_show_features ADD CONSTRAINT silver_pk PRIMARY KEY(record_id)")
+
