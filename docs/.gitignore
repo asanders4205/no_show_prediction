@@ -7,3 +7,6 @@ journal.md
 
 # Config.yaml
 config.yaml
+
+# Cache
+.pytest_cache
