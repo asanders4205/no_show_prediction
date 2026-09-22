@@ -3,6 +3,7 @@
 
 # Imports
 import math
+import numpy as np
 import pandas as pd
 from pyspark.sql.functions import col, sin, cos, month, dayofweek, dayofyear, lit, create_map, when
 from pyspark.ml.feature import OneHotEncoder, StringIndexer, VectorAssembler, MinMaxScaler
@@ -10,6 +11,8 @@ from sklearn.preprocessing import TargetEncoder
 from pyspark.ml import Pipeline
 from itertools import chain
 import os, yaml
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # Functions
 ''' train_test_split()
@@ -206,6 +209,64 @@ def load_tbl_from_config(object_name):
 
     return spark.table(table_path)
 
+'''determine_feature_importance
+    Purpose: Find improtant features
+    Return: None
+'''
+def determine_feature_importance(df):
+    # Convert Spark DataFrame to pandas for correlation computation.
+    # Spark DataFrames don't have a built-in full correlation-matrix method,
+    # so we bring the data to the driver and compute with pandas.
+    # (Safe here because n_samples=2000 is small; for large data, sample first.)
+    pdf = df.toPandas() if hasattr(df, "toPandas") else df  # works for both Spark and pandas DataFrames
+
+    # Encode Gender as numeric so it's included in the correlation matrix
+    if "Gender" in pdf.columns and pdf["Gender"].dtype == object:
+        pdf["Gender"] = pdf["Gender"].map({"F": 0, "M": 1})
+
+    # Encode Neighborhood via target encoding so it's included in the correlation matrix
+    if "Neighborhood" in pdf.columns and pdf["Neighborhood"].dtype == object:
+        te = TargetEncoder(target_type="binary", smooth="auto")
+        pdf["Neighborhood_te"] = te.fit_transform(pdf[["Neighborhood"]], pdf["Showed_up"])
+        pdf = pdf.drop(columns=["Neighborhood"])
+
+    # Encode date columns as cyclical sin/cos features so they're included in the correlation matrix
+    for date_col, prefix in [("ScheduledDay", "Sched"), ("AppointmentDay", "Appoi")]:
+        if date_col in pdf.columns:
+            pdf[date_col] = pd.to_datetime(pdf[date_col])
+            pdf[f"{prefix}_month_sin"] = np.sin(2 * math.pi * pdf[date_col].dt.month / 12)
+            pdf[f"{prefix}_month_cos"] = np.cos(2 * math.pi * pdf[date_col].dt.month / 12)
+            pdf[f"{prefix}_dayofyear_sin"] = np.sin(2 * math.pi * pdf[date_col].dt.dayofyear / 365)
+            pdf[f"{prefix}_dayofyear_cos"] = np.cos(2 * math.pi * pdf[date_col].dt.dayofyear / 365)
+            pdf = pdf.drop(columns=[date_col])
+
+    # Correlation heatmap of all features + target
+    fig, ax = plt.subplots(figsize=(12, 10))
+    corr = pdf.corr(numeric_only=True)
+    sns.heatmap(corr, cmap="coolwarm", center=0, annot=False, fmt=".2f", square=True, ax=ax,
+                cbar_kws={"shrink": 0.8})
+    ax.set_title("Feature Correlation Matrix -1: Perfectly negative correlation, +1: Perfect positive correlation")
+    plt.tight_layout()
+    plt.show()
+
+    # Bar chart of |correlation with target| for each feature
+    target_corr = corr["Showed_up"].drop("Showed_up").abs().sort_values(ascending=False)
+    fig2, ax2 = plt.subplots(figsize=(10, 5))
+    target_corr.plot.bar(ax=ax2, color="steelblue")
+    ax2.set_title("|Correlation with Target| by Feature")
+    ax2.set_ylabel("Absolute Pearson Correlation")
+    ax2.axhline(y=0.05, color="red", linestyle="--", label="noise threshold (~0.05)")
+    ax2.legend()
+    plt.tight_layout()
+    plt.show()
+
+
+
+
+
+
+
+
 
 
 
@@ -213,6 +274,8 @@ def load_tbl_from_config(object_name):
 if __name__ == "__main__":
 
     silver_df = load_tbl_from_config("silver_table_path")
+
+    determine_feature_importance(silver_df)
 
     # silver_df = spark.table(silver_table_path)
 
