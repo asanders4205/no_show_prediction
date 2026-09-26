@@ -8,6 +8,8 @@ import pandas as pd
 from pyspark.sql.functions import col, sin, cos, month, dayofweek, dayofyear, lit, create_map, when
 from pyspark.ml.feature import OneHotEncoder, StringIndexer, VectorAssembler, MinMaxScaler
 from sklearn.preprocessing import TargetEncoder
+from sklearn.feature_selection import RFE
+from sklearn.linear_model import LogisticRegression as SklearnLogisticRegression
 from pyspark.ml import Pipeline
 from itertools import chain
 import os, yaml
@@ -214,10 +216,6 @@ def load_tbl_from_config(object_name):
     Return: None
 '''
 def determine_feature_importance(df):
-    # Convert Spark DataFrame to pandas for correlation computation.
-    # Spark DataFrames don't have a built-in full correlation-matrix method,
-    # so we bring the data to the driver and compute with pandas.
-    # (Safe here because n_samples=2000 is small; for large data, sample first.)
     pdf = df.toPandas() if hasattr(df, "toPandas") else df  # works for both Spark and pandas DataFrames
 
     # Encode Gender as numeric so it's included in the correlation matrix
@@ -266,6 +264,50 @@ def determine_feature_importance(df):
 
 
 
+''' recursive_feature_elimination()
+    Purpose: Use sklearn RFE to select the top N most important features from the scaled feature vector
+    Parameters:
+        train_scaled: Spark DataFrame with "scaledFeatures" vector column and "Showed_up" label
+        test_scaled: Spark DataFrame with "scaledFeatures" vector column
+        numerical_cols: List of feature names corresponding to the vector elements
+        n_features_to_select: Number of features to keep (default 5)
+    Return:
+        selected_features: List of selected feature names
+        X_train_rfe: pandas DataFrame with only the selected features (train)
+        X_test_rfe: pandas DataFrame with only the selected features (test)
+        y_train: pandas Series of training labels
+        y_test: pandas Series of test labels
+'''
+def recursive_feature_elimination(train_scaled, test_scaled, numerical_cols, n_features_to_select=5):
+    # Collect scaled feature vectors and labels to pandas
+    train_pd = train_scaled.select("scaledFeatures", "Showed_up").toPandas()
+    test_pd  = test_scaled.select("scaledFeatures", "Showed_up").toPandas()
+
+    # Expand the DenseVector / SparseVector "scaledFeatures" into individual columns
+    X_train = pd.DataFrame(train_pd["scaledFeatures"].tolist(), columns=numerical_cols)
+    y_train = train_pd["Showed_up"]
+    X_test  = pd.DataFrame(test_pd["scaledFeatures"].tolist(), columns=numerical_cols)
+    y_test  = test_pd["Showed_up"]
+
+    # Base estimator: sklearn LogisticRegression with class weights to handle imbalance
+    estimator = SklearnLogisticRegression(max_iter=1000, class_weight="balanced")
+
+    # Run Recursive Feature Elimination
+    selector = RFE(estimator, n_features_to_select=n_features_to_select, step=1)
+    selector.fit(X_train, y_train)
+
+    # Report results
+    selected_features = [f for f, s in zip(numerical_cols, selector.support_) if s]
+    print(f"\nRFE selected {len(selected_features)} of {len(numerical_cols)} features:\n")
+    for i, (feat, rank) in enumerate(zip(numerical_cols, selector.ranking_)):
+        marker = "  ✓ selected" if selector.support_[i] else f"  (rank {rank})"
+        print(f"  {feat:30s}{marker}")
+
+    # Transform both splits to selected features only
+    X_train_rfe = pd.DataFrame(selector.transform(X_train), columns=selected_features)
+    X_test_rfe  = pd.DataFrame(selector.transform(X_test),  columns=selected_features)
+
+    return selected_features, X_train_rfe, X_test_rfe, y_train, y_test
 
 
 
