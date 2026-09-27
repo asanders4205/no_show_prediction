@@ -323,7 +323,6 @@ if __name__ == "__main__":
 
     train_df, test_df = train_test_split(silver_df)
 
-    # TODO: These should not be hard coded
     # Base numeric features (cast to double, IDs and target excluded)
     numerical_cols = ["Age", "Scholarship", "Hypertension", "Diabetes",
                       "Alcoholism", "Handicap", "SMS_received", "date_diff"]

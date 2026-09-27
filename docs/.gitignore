@@ -10,3 +10,7 @@ config.yaml
 
 # Cache
 .pytest_cache
+
+
+# Legacy notebooks
+/Workspace/Users/<your_email>/no_show_prediction/data/legacy_pipeline_notebooks

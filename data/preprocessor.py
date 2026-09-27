@@ -186,9 +186,6 @@ def load_tbl_from_config(object_name):
 
 # Entry point - only runs when executed directly, not when imported
 if __name__ == "__main__":
-    # Declare bronze df
-    # bronze_df = spark.table("workspace.default.bronze_features")
-
 
     # Load from config file
     bronze_df = load_tbl_from_config("bronze_table_path")

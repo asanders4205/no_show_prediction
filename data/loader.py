@@ -49,23 +49,15 @@ def get_dataset_path_yaml():
 
 # Entry Point (only runs when executed directly, not when imported as a package)
 if __name__ == "__main__":
-    # dataset_folder = '/Workspace/Users/<your_email>/no_show_prediction/input-datasets/'
-    # dataset_folder = '/Workspace/Users/<your_email>/no_show_prediction/data/input-datasets/'
-    # appointment_noshow_dataset = "healthcare_noshows.csv"
-    
 
     # Get yaml file path from defined function
     dataset_path = get_dataset_path_yaml()
-
-    # Load from CSV
-    # bronze_features_df = load_csv_to_df(dataset_folder, appointment_noshow_dataset)
 
     # Load from YAML filepath
     bronze_features_df = spark.read.format("csv") \
         .option("header", "true") \
         .option("inferSchema", "true") \
         .load(dataset_path)
-
 
     # Write to delta table
     write_to_delta_table(bronze_features_df, "default", "bronze_features")
