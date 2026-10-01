@@ -1,6 +1,6 @@
 # No-Show Prediction
 
-An end-to-end automated ML pipeline on Databricks that predicts whether patients will attend their scheduled medical appointments. The pipeline covers data loading, feature engineering, model training with hyperparameter tuning, MLflow experiment tracking, and automatic promotion of the best model to a production alias.
+An end-to-end ML pipeline on Databricks that predicts whether patients will attend their scheduled medical appointments. The pipeline covers data loading, feature engineering, model training with hyperparameter tuning, MLflow experiment tracking, and automatic promotion of the best model to a production alias.
 
 
 ## Dataset
@@ -34,22 +34,31 @@ An end-to-end automated ML pipeline on Databricks that predicts whether patients
 ## Pipeline
 
 ```
-Load CSV with explicit schema
+↓
+Dataset loaded from folder into bronze Delta table
         ↓
-Cast int/bool → double, drop high-null columns, drop ID columns
+Load CSV into bronze Delta table
         ↓
-Compute date_diff (days between scheduling and appointment)
+Data Preprocessing
+        * Schema validation with pre-defined expectations
+        * Column renaming and casting to match expectations
+        * Drop high-null columns, drop ID columns
+        * Add unique ID for primary key
         ↓
-80/20 train/test split (seed=42)
+Feature Engineering
+        * Compute date_diff (days between scheduling and appointment)
+        * Determine feature importance
+        * 80/20 train/test split (seed=42)
+        * Class imbalance handling (weightCol ≈ 4:1 for minority class)
+        * Cyclical Date Encoding  →  sin/cos encoding for ScheduledDay & AppointmentDay (12 features)
+        * Encode Neighborhood as a numeric vector with TargetEncoder (~81 values)
+        * Encode Gender similarly with StringIndexer + OneHotEncoder
+        * Fit indexer and encoder on models
+        * Scale train and test sets with MinMaxScaler
+        * Apply class weights to handle imbalance (Square root of ratio: Maj to Min classes)
         ↓
-Class imbalance handling (weightCol ≈ 4:1 for minority class)
-        ↓
-CyclicalDateTransformer  →  sin/cos encoding for ScheduledDay & AppointmentDay (12 features)
-        ↓
-TargetEncoder  →  Neighborhood (~81 values)
-StringIndexer + OneHotEncoder  →  Gender
-        ↓
-VectorAssembler  →  single feature vector
+Model training
+        * Select N most relevant features using Recursive Feature Elimination
         ↓
 Model training with CrossValidator (3-fold, AUC metric)
         ↓

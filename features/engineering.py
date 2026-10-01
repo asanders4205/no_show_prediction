@@ -1,7 +1,3 @@
-''' Feature Engineering package. Modularization of feature_engineering Notebook'''
-
-
-# Imports
 import math
 import numpy as np
 import pandas as pd
@@ -15,6 +11,10 @@ from itertools import chain
 import os, yaml
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+
+
+
 
 # Functions
 ''' train_test_split()
@@ -131,7 +131,7 @@ def gender_encoder(numerical_cols):
     Param:
     Return:
 '''
-def fit_indexer_on_models(train_df,test_df, indexer):
+def fit_indexer_on_models(train_df, test_df, indexer):
     indexer_model = indexer.fit(train_df)
     train_df_indexed = indexer_model.transform(train_df)
     test_df_indexed = indexer_model.transform(test_df)
@@ -145,7 +145,7 @@ def fit_indexer_on_models(train_df,test_df, indexer):
     Param:
     Return:
 '''
-def fit_encoder_on_models(train_df,test_df, encoder):
+def fit_encoder_on_models(train_df, test_df, encoder):
     # Fit encoder on train, transform both train and test
     encoder_model = encoder.fit(train_df)
     train_df_encoded = encoder_model.transform(train_df)
@@ -210,6 +210,10 @@ def load_tbl_from_config(object_name):
     table_path = cfg[object_name]
 
     return spark.table(table_path)
+
+
+
+
 
 '''determine_feature_importance
     Purpose: Find improtant features

@@ -1,5 +1,3 @@
-# Modularization of the `preprocessing` Notebook
-
 from pyspark.sql.types import IntegerType, BooleanType
 from pyspark.sql import functions as F
 from pyspark.sql.functions import (
@@ -10,6 +8,9 @@ from pyspark.sql.functions import (
 ) # End import
 import schemas
 import yaml, os
+
+
+
 
 
 """cast_numeric_columns()
@@ -30,6 +31,8 @@ def cast_numeric_columns(df):
     df = df.withColumn("Showed_up", col("Showed_up").cast("double"))
 
     return df
+
+
 
 
 
@@ -64,6 +67,8 @@ def drop_null_columns(df):
 
 
 
+
+
 """ drop_null_records()
     Purpose: Remove rows with at least 3 null values
     Return: Dataframe with records dropped
@@ -79,6 +84,8 @@ def drop_null_records(df):
 
 
 
+
+
 """ add_unique_id()
     Purpose: Add monotonically increasing unique ID
     Return: Dataframe with ID column added
@@ -90,6 +97,8 @@ def add_unique_id(df):
     df = df.withColumn("record_id", monotonically_increasing_id() + 1)
 
     return df
+
+
 
 
 

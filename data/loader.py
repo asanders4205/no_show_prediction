@@ -25,13 +25,22 @@ def load_csv_to_df(folder_path, dataset_name):
     return processed_spark_df
 
 
+
+
+
 ''' write_to_delta_table()
     Purpose:Write a spark df to a delta table
     Return: Void
 '''
 def write_to_delta_table(spark_df, tbl_schema, tbl_name):
+
     spark_df.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(f"{tbl_schema}.{tbl_name}")
+
     return None
+
+
+
+
 
 ''' 
     Purpose: Load in config yaml file
@@ -45,6 +54,9 @@ def get_dataset_path_yaml():
     dataset_path = cfg["dataset_path"]
 
     return dataset_path
+
+
+
 
 
 # Entry Point (only runs when executed directly, not when imported as a package)
