@@ -20,7 +20,7 @@ Class imbalance is addressed via a `weightCol` where no-show samples receive a w
 
 A Logistic Regression baseline (PR-AUC 0.8837, F1 0.7446) was also trained on the same features for comparison.
 
-- **Developed by:** <your_email>
+- **Developed by:** Alec Sanders
 - **Funded by [optional]:** N/A — personal learning project
 - **Shared by [optional]:** N/A
 - **Model type:** Supervised binary classification (Random Forest)
@@ -32,7 +32,7 @@ A Logistic Regression baseline (PR-AUC 0.8837, F1 0.7446) was also trained on th
 
 <!-- Provide the basic links for the model. -->
 
-- **Repository:** `/Workspace/Users/<your_email>/no_show_prediction/`
+- **Repository:** See `config.yaml` in the project root (`no_show_prediction/`)
 - **Paper [optional]:** N/A
 - **Demo [optional]:** N/A
 
@@ -113,7 +113,7 @@ The training data is the "Medical Appointment No Shows" dataset from Kaggle, con
 
 Raw columns: `PatientId`, `AppointmentID` (dropped), `Gender`, `ScheduledDay`, `AppointmentDay`, `Age`, `Neighborhood`, `Scholarship`, `Hypertension`, `Diabetes`, `Alcoholism`, `Handicap`, `SMS_received`, `Showed_up` (target).
 
-Source file: `/Workspace/Users/<your_email>/databricks_repo/noshows-prediction/input-datasets/healthcare_noshows.csv`
+Source file: See `dataset_path` in `config.yaml`
 
 ### Training Procedure
 
@@ -241,28 +241,9 @@ AWS-backed serverless CPU instances. No GPU required for this tree-based model.
 - **PySpark ML:** `pyspark.ml.classification.RandomForestClassifier`, `CrossValidator`, `ParamGridBuilder`
 - **scikit-learn:** `TargetEncoder`, `RFE`, `LogisticRegression` (feature selection / baseline)
 - **MLflow:** Experiment tracking, model registry, champion alias promotion
-- **Experiment path:** `/Users/<your_email>/noshows-pipeline-agent`
+- **Experiment path:** See `mlflow.experiment_path` in `config.yaml`
 - **Registered model:** `noshows_random_forest` with `@champion` alias
 - **Training hyperparameters:** numTrees=10, maxDepth=10, minInstancesPerNode=20, featureSubsetStrategy=sqrt, CrossValidator 3-fold, parallelism=4, F1 evaluator
-
-## Citation [optional]
-
-<!-- If there is a paper or blog post introducing the model, the APA and Bibtex information for that should go in this section. -->
-
-**BibTeX:**
-
-```bibtex
-@misc{noshow_prediction_2026,
-  title={Patient No-Show Prediction using PySpark ML and MLflow on Databricks},
-  author={asanders4205},
-  year={2026},
-  note={Personal learning project — Random Forest binary classifier for medical appointment no-show prediction}
-}
-```
-
-**APA:**
-
-asanders4205. (2026). Patient No-Show Prediction using PySpark ML and MLflow on Databricks. Personal learning project.
 
 ## Glossary [optional]
 
@@ -286,8 +267,8 @@ The project also includes a Logistic Regression baseline model (`noshows_logisti
 
 ## Model Card Authors [optional]
 
-<your_email>
+Alec Sanders
 
 ## Model Card Contact
 
-<your_email>
+Alec Sanders

@@ -18,7 +18,7 @@ A key difference: Recursive Feature Elimination (RFE) selects **7 features** for
 
 Class imbalance is addressed via a `weightCol` where no-show samples (class 0) receive a weight of 1.9842 and show samples (class 1) receive 1.0. The decision threshold was tuned via an F1 sweep to 0.55, higher than the Random Forest's 0.30, reflecting the different probability distributions produced by the linear model.
 
-- **Developed by:** <your_email>
+- **Developed by:** Alec Sanders
 - **Funded by [optional]:** N/A — personal learning project
 - **Shared by [optional]:** N/A
 - **Model type:** Supervised binary classification (Logistic Regression)
@@ -28,7 +28,7 @@ Class imbalance is addressed via a `weightCol` where no-show samples (class 0) r
 
 ### Model Sources [optional]
 
-- **Repository:** `/Workspace/Users/<your_email>/no_show_prediction/`
+- **Repository:** See `config.yaml` in the project root (`no_show_prediction/`)
 - **Paper [optional]:** N/A
 - **Demo [optional]:** N/A
 
@@ -98,7 +98,7 @@ The training data is the "Medical Appointment No Shows" dataset from Kaggle, con
 
 Raw columns: `PatientId`, `AppointmentID` (dropped), `Gender`, `ScheduledDay`, `AppointmentDay`, `Age`, `Neighborhood`, `Scholarship`, `Hypertension`, `Diabetes`, `Alcoholism`, `Handicap`, `SMS_received`, `Showed_up` (target).
 
-Source file: `/Workspace/Users/<your_email>/databricks_repo/noshows-prediction/input-datasets/healthcare_noshows.csv`
+Source file: See `dataset_path` in `config.yaml`
 
 ### Training Procedure
 
@@ -224,26 +224,9 @@ AWS-backed serverless CPU instances. No GPU required for this linear model.
 - **PySpark ML:** `pyspark.ml.classification.LogisticRegression`, `CrossValidator`, `ParamGridBuilder`
 - **scikit-learn:** `TargetEncoder`, `RFE`, `LogisticRegression` (feature selection only)
 - **MLflow:** Experiment tracking, model registry, champion alias promotion
-- **Experiment path:** `/Users/<your_email>/noshows-pipeline-agent`
+- **Experiment path:** See `mlflow.experiment_path` in `config.yaml`
 - **Registered model:** `noshows_logistic_regression` with `@champion` alias
 - **Training notebook:** `models/logistic_regression` (notebook ID: 1606283588053603)
-
-## Citation [optional]
-
-**BibTeX:**
-
-```bibtex
-@misc{noshow_prediction_lr_2026,
-  title={Patient No-Show Prediction — Logistic Regression Baseline using PySpark ML on Databricks},
-  author={asanders4205},
-  year={2026},
-  note={Personal learning project — Logistic Regression baseline for medical appointment no-show prediction}
-}
-```
-
-**APA:**
-
-asanders4205. (2026). Patient No-Show Prediction — Logistic Regression Baseline using PySpark ML on Databricks. Personal learning project.
 
 ## Glossary [optional]
 
@@ -266,8 +249,4 @@ The full pipeline includes data loading with explicit schema, type casting, null
 
 ## Model Card Authors [optional]
 
-<your_email>
-
-## Model Card Contact
-
-<your_email>
+Alec Sanders
