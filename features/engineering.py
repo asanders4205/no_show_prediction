@@ -10,7 +10,6 @@ from pyspark.ml import Pipeline
 from itertools import chain
 import os, yaml
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 
 
@@ -245,8 +244,12 @@ def determine_feature_importance(df):
     # Correlation heatmap of all features + target
     fig, ax = plt.subplots(figsize=(12, 10))
     corr = pdf.corr(numeric_only=True)
-    sns.heatmap(corr, cmap="coolwarm", center=0, annot=False, fmt=".2f", square=True, ax=ax,
-                cbar_kws={"shrink": 0.8})
+    im = ax.imshow(corr.values, cmap="coolwarm", vmin=-1, vmax=1, aspect="auto")
+    ax.set_xticks(range(len(corr.columns)))
+    ax.set_xticklabels(corr.columns, rotation=90, fontsize=8)
+    ax.set_yticks(range(len(corr.columns)))
+    ax.set_yticklabels(corr.columns, fontsize=8)
+    fig.colorbar(im, ax=ax, shrink=0.8)
     ax.set_title("Feature Correlation Matrix -1: Perfectly negative correlation, +1: Perfect positive correlation")
     plt.tight_layout()
     plt.show()
