@@ -7,6 +7,7 @@ journal.md
 
 # Config.yaml
 config.yaml
+/Workspace/Users/<your_email>/no_show_prediction/config.yaml
 
 # Cache
 .pytest_cache
