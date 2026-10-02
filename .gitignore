@@ -1,18 +1,5 @@
-# Claude
-CLAUDE.md
-.claude/
-
-# Journal
-journal.md
-
 # Config.yaml
 config.yaml
 
 # Cache
 .pytest_cache
-
-
-# Legacy notebooks
-/data/legacy_pipeline_notebooks
-
-/future_work
