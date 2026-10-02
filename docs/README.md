@@ -34,7 +34,6 @@ An end-to-end ML pipeline on Databricks that predicts whether patients will atte
 ## Pipeline
 
 ```
-↓
 Dataset loaded from folder into bronze Delta table
         ↓
 Load CSV into bronze Delta table
@@ -44,7 +43,6 @@ Data Preprocessing
         * Column renaming and casting to match expectations
         * Drop high-null columns, drop ID columns
         * Add unique ID for primary key
-        ↓
 Feature Engineering
         * Compute date_diff (days between scheduling and appointment)
         * Determine feature importance
@@ -56,15 +54,12 @@ Feature Engineering
         * Fit indexer and encoder on models
         * Scale train and test sets with MinMaxScaler
         * Apply class weights to handle imbalance (ratio of Maj to Min classes)
-        ↓
 Model training
         * Select N most relevant features using Recursive Feature Elimination
         * (LR: 7 features, RF: 12 features)
-        ↓
 Model training with CrossValidator (3-fold)
         * LR: AUC evaluator, RF: F1 (weighted) evaluator
         * Threshold tuned via F1 sweep post-training
-        ↓
 Promote best version to @champion alias
 ```
 
@@ -80,7 +75,7 @@ Promote best version to @champion alias
 
 ### Class imbalance handling
 
-The dataset is ~80% show / ~20% no-show (~4:1 ratio). To prevent the model from always predicting "show" and achieving misleading 80% accuracy:
+The dataset is 80% show / 20% no-show. To prevent the model from always predicting "show" and achieving misleading 80% accuracy:
 
 - **`weightCol`** with weight for no-shows (minority class) derived from the training-set count ratio (show_count / no_show_count). For Logistic Regression this is ~1.98; for Random Forest ~4.0. Shows receive weight 1.0.
 - **Primary metrics:** PR-AUC (Average Precision) for model comparison + F1 (weighted) + Recall on no-show class (healthcare sensitivity)
@@ -117,8 +112,8 @@ The Random Forest outperforms the Logistic Regression baseline on both PR-AUC (+
 
 ## MLflow & Model Registry
 
-- **Experiment:** `/Users/<your_email>/noshows-pipeline-agent`
-- **Registered models:** `noshows_random_forest` (champion) and `noshows_logistic_regression` (baseline)
+- **Experiment:** path defined in `config.yaml` (`mlflow.experiment_path`)
+- **Registered models:** defined in `config.yaml` — `rf_model_path` (champion) and `lr_model_path` (baseline)
 - Each run logs:
   - **Parameters:** All model hyperparameters and pipeline config
   - **Metrics:** PR-AUC, F1 (weighted), precision, recall, AUC
@@ -129,14 +124,18 @@ The Random Forest outperforms the Logistic Regression baseline on both PR-AUC (+
 **Load the champion model for inference:**
 
 ```python
+import yaml
 import mlflow.spark
 
+with open("config.yaml") as f:
+    cfg = yaml.safe_load(f)
+
 # Random Forest (champion)
-model = mlflow.spark.load_model("models:/noshows_random_forest@champion")
+model = mlflow.spark.load_model(f"models:/{cfg['rf_model_path']}@champion")
 predictions = model.transform(new_data_df)
 
 # Logistic Regression (baseline)
-lr_model = mlflow.spark.load_model("models:/noshows_logistic_regression@champion")
+lr_model = mlflow.spark.load_model(f"models:/{cfg['lr_model_path']}@champion")
 ```
 ---
 
@@ -144,22 +143,68 @@ lr_model = mlflow.spark.load_model("models:/noshows_logistic_regression@champion
 
 ```
 no_show_prediction/
-├── config.yaml                   # Config with table paths and model paths
+├── config.yaml                   # All paths and settings — see Configuration below
+├── data/
+│   ├── loader.py / preprocessor.py / schemas.py  # Data loading & preprocessing modules
+│   ├── input-datasets/
+│   │   ├── healthcare_noshows.csv       # Raw dataset (~107K rows), uploaded to volume_path
+│   │   └── Upload CSV to UC Volume      # Notebook that loads the CSV into volume_path
 ├── features/
 │   └── engineering.py            # Feature engineering module (RFE, encoding, scaling)
 ├── models/
 │   ├── logistic_regression/      # LR training notebook (ID: 1606283588053603)
 │   └── random_forest/             # RF training notebook (ID: 1606283588053604)
-├── docs/
-│   ├── README.md                 # This file
-│   ├── design.md                  # Business context, metric choice, cost asymmetry
-│   ├── model_card_random_forest.md    # RF model card
-│   └── model_card_logistic_regression.md  # LR model card
-└── input-datasets/
-    └── healthcare_noshows.csv    # Raw dataset (~107K rows)
+├── tests/                        # Pytest suite (test_engineering.py, test_preprocessor.py)
+└── docs/
+    ├── README.md                 # This file
+    ├── design.md                  # Business context, metric choice, cost asymmetry
+    ├── model_card_random_forest.md    # RF model card
+    ├── model_card_logistic_regression.md  # LR model card
+    └── requirements.txt           # Dependencies not pre-installed on Databricks
 ```
 
-**Dataset path:** `/Workspace/Users/<your_email>/databricks_repo/noshows-prediction/input-datasets/healthcare_noshows.csv`
+**All dataset, table, and model locations are defined in `config.yaml`** — see [Configuration](#configuration-configyaml).
+
+---
+
+## Configuration (`config.yaml`)
+
+All workspace-specific paths live in `config.yaml` at the project root. Every notebook and module reads its dataset, table, and model locations from this file, so no absolute paths are hardcoded in the code. Create the file before running anything:
+
+```yaml
+# Unity Catalog volume that holds the raw dataset
+volume_path: "/Volumes/<catalog>/<schema>/<volume>"
+
+# Raw CSV (uploaded to the volume above via the "Upload CSV to UC Volume" notebook)
+dataset_path: "/Volumes/<catalog>/<schema>/<volume>/healthcare_noshows.csv"
+
+# Tables
+bronze_table_path: "<catalog>.<schema>.<bronze_table>"
+silver_table_path: "<catalog>.<schema>.<silver_table>"
+
+# Scaled datasets
+train_scaled_dataset_path: "<catalog>.<schema>.<train_scaled_table>"
+test_scaled_dataset_path: "<catalog>.<schema>.<test_scaled_table>"
+
+# Registered models (Unity Catalog Model Registry)
+lr_model_path: "<catalog>.<schema>.<logistic_regression_model>"
+rf_model_path: "<catalog>.<schema>.<random_forest_model>"
+
+# Absolute workspace path to the features module (imported by the training notebooks)
+features_path: "/Workspace/Users/<your-username>/no_show_prediction/features"
+
+mlflow:
+  experiment_path: "/Users/<your-username>/<experiment-name>"
+
+model_output_path: "<catalog>.<schema>.<models>"
+
+random_seed: 42
+```
+
+Notes:
+- Replace `<your-username>` with your Databricks workspace username, and `<catalog>.<schema>` with the Unity Catalog names the pipeline should write to.
+- `config.yaml` is gitignored — each user creates their own copy, which is why no workspace path appears in committed code.
+- If you move the project, only `features_path` and `mlflow.experiment_path` need updating; every other key points at Unity Catalog objects.
 
 ---
 
@@ -167,7 +212,9 @@ no_show_prediction/
 
 ### Prerequisites
 
-**Install dependencies** (only needed for notebooks, not for jobs with proper cluster config):
+**1. Create `config.yaml`** at the project root — copy the template in [Configuration](#configuration-configyaml) and fill in your Unity Catalog names and workspace username.
+
+**2. Install dependencies** (only needed for notebooks, not for jobs with proper cluster config):
 
 ```python
 %pip install -r requirements.txt
@@ -189,12 +236,10 @@ Required packages:
 
 
 
-
+<!--
 ---
 
 ## Project Status
-
-**This is a learning project** focused on teaching end-to-end ML pipeline development on Databricks.
 
 **Completed:**
 * ✅ Cyclical date encoding (sin/cos for month + day-of-year on both date columns)
@@ -214,5 +259,5 @@ Required packages:
 * Deployment as a Model Serving endpoint
 * A/B testing framework for model comparison
 * Fairness audit across protected attributes (age, gender, neighbourhood)
-
+-->
 
