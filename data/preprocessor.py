@@ -77,7 +77,7 @@ def drop_null_columns(df):
 
 
 
-'''def drop_null_records(df):
+def drop_null_records(df):
     """Drop rows with 3 or more null values.
 
     Args:
@@ -87,12 +87,12 @@ def drop_null_columns(df):
         Spark DataFrame with high-null rows removed.
     """
     NUM_COLS = len(df.columns)
-    NULL_COLS_ALLOWED = 3
+    NULL_COLS_ALLOWED = 2
     THRESHOLD_VALUE = NUM_COLS - NULL_COLS_ALLOWED
 
     df = df.dropna(thresh=THRESHOLD_VALUE)
 
-    return df'''
+    return df
 
 
 

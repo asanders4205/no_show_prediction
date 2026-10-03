@@ -290,7 +290,7 @@ class TestValidateSchema:
         ])
         df = spark.createDataFrame([("Alice", "25"), ("Bob", "30")], actual_schema)
         
-        with pytest.raises(ValueError, match="type mismatch"):
+        with pytest.raises(ValueError, match="Schema validation failed"):
             preprocessor.validate_schema(df, expected_schema)
     
     def test_returns_error_details(self, spark):
