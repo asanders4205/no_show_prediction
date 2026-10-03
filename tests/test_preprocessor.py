@@ -75,8 +75,9 @@ class TestCastNumericColumns:
             StructField("name", StringType(), True),
             StructField("city", StringType(), True),
             StructField("age", IntegerType(), True),
+            StructField("Showed_up", BooleanType(), True),
         ])
-        data = [("Alice", "NYC", 25), ("Bob", "LA", 30)]
+        data = [("Alice", "NYC", 25, True), ("Bob", "LA", 30, False)]
         df = spark.createDataFrame(data, schema)
         
         result_df = preprocessor.cast_numeric_columns(df)

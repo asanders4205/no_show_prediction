@@ -1,10 +1,14 @@
+"""Schema definitions and column-rename mappings for the no-show dataset."""
+
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DateType, BooleanType, DoubleType
 
+# Columns from the raw CSV that need renaming to match downstream expectations
 RAW_COLUMN_RENAMES = {
     "Neighbourhood": "Neighborhood",
     "Hipertension": "Hypertension",
 }
 
+# Expected schema for the patient appointments dataset after column renames
 PATIENT_SCHEMA = StructType([
     StructField("PatientId", IntegerType(), True),
     StructField("AppointmentID", IntegerType(), True),

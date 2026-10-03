@@ -5,7 +5,7 @@ from pyspark.sql.functions import (
     when,
     sum as spark_sum,
     monotonically_increasing_id,
-) # End import
+)
 import schemas
 import yaml, os
 
@@ -13,12 +13,17 @@ import yaml, os
 
 
 
-"""cast_numeric_columns()
-Purpose: Convert numeric (integer and numeric-typed boolean) columns to double
-Output: TBD
-"""
 def cast_numeric_columns(df):
-    # List integer and boolean columns - how to convert boolean and integer to double at once?
+    """Cast all integer and boolean columns to double for ML compatibility.
+
+    Also explicitly casts the target column "Showed_up" to double.
+
+    Args:
+        df: Spark DataFrame with integer/boolean columns.
+
+    Returns:
+        Spark DataFrame with all numeric columns cast to double.
+    """
     integer_cols = [
         c.name
         for c in df.schema.fields
@@ -36,12 +41,15 @@ def cast_numeric_columns(df):
 
 
 
-""" drop_null_columns()
-    Purpose: Drop columns with > 80% (configurable) null values
-    Return: Dataframe with null columns dropped
-"""
 def drop_null_columns(df):
-    # Define threshold (e.g., 0.3 for 30%)
+    """Drop columns with more than 80% null values.
+
+    Args:
+        df: Spark DataFrame to audit.
+
+    Returns:
+        Spark DataFrame with high-null columns removed.
+    """
     threshold = 0.8
     total_rows = df.count()
 
@@ -69,31 +77,38 @@ def drop_null_columns(df):
 
 
 
-""" drop_null_records()
-    Purpose: Remove rows with at least 3 null values
-    Return: Dataframe with records dropped
-"""
-def drop_null_records(df):
+'''def drop_null_records(df):
+    """Drop rows with 3 or more null values.
+
+    Args:
+        df: Spark DataFrame to filter.
+
+    Returns:
+        Spark DataFrame with high-null rows removed.
+    """
     NUM_COLS = len(df.columns)
     NULL_COLS_ALLOWED = 3
     THRESHOLD_VALUE = NUM_COLS - NULL_COLS_ALLOWED
 
     df = df.dropna(thresh=THRESHOLD_VALUE)
 
-    return df
+    return df'''
 
 
 
 
-
-""" add_unique_id()
-    Purpose: Add monotonically increasing unique ID
-    Return: Dataframe with ID column added
-    
-    Note: May need to configure use as primary key in the Unity Catalog. This is a one-time DDL statement
-"""
 def add_unique_id(df):
-    # Add unique ID column
+    """Add a monotonically increasing unique ID column.
+
+    Adds a "record_id" column starting at 1.  This can be configured as a
+    primary key in Unity Catalog via a one-time DDL statement.
+
+    Args:
+        df: Spark DataFrame to augment.
+
+    Returns:
+        Spark DataFrame with a "record_id" column added.
+    """
     df = df.withColumn("record_id", monotonically_increasing_id() + 1)
 
     return df
@@ -102,13 +117,8 @@ def add_unique_id(df):
 
 
 
-''' validate_schema()
-    Purpose: Validate correctness of incoming data against established schema
-    Return: Tuple (is_valid: bool, errors: list)
-'''
 def validate_schema(df, expected_schema):
-    """
-    Validates that the incoming DataFrame matches the expected schema.
+    """Validate that a DataFrame matches the expected schema.
     
     Args:
         df: Input PySpark DataFrame
@@ -177,13 +187,17 @@ def validate_schema(df, expected_schema):
     
     return is_valid, errors
 
-''' load_tbl_from_config
-    Purpose: Return table loaded from file path in config file
-    Parameter: Object path, passed as string
-    Return: Spark dataframe containing bronze features, loaded from Unity Catalog table, at location
-        specified in the config.yaml file
-'''
 def load_tbl_from_config(object_name):
+    """Load a Spark DataFrame from a Unity Catalog table path in config.yaml.
+
+    Looks for ../config.yaml first, falling back to config.example.yaml.
+
+    Args:
+        object_name: Key in the config dict (e.g. "bronze_table_path").
+
+    Returns:
+        Spark DataFrame loaded from the table at the configured path.
+    """
     config_file = "../config.yaml" if os.path.exists("../config.yaml") else "config.example.yaml"
 
     with open(config_file) as f:

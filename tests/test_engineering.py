@@ -244,14 +244,13 @@ class TestGenderEncoder:
     """Tests for gender_encoder function."""
     
     def test_returns_updated_numerical_cols(self):
-        """Verify that function attempts to return updated list with Gender_vec."""
+        """Verify that function returns updated list with Gender_vec."""
         numerical_cols = ["Age", "Scholarship"]
         
-        # This function has a bug (uses undefined variable), so we test the intended behavior
-        # by verifying it would add Gender_vec if the bug were fixed
-        # For now, we test that it raises an error
-        with pytest.raises(NameError):
-            engineering.gender_encoder(numerical_cols)
+        # The function now works correctly, returning the updated list plus indexer/encoder
+        result_cols, indexer, encoder = engineering.gender_encoder(numerical_cols)
+        
+        assert "Gender_vec" in result_cols
     
     def test_creates_indexer_and_encoder_objects(self):
         """Verify that StringIndexer and OneHotEncoder objects are created."""
@@ -273,11 +272,11 @@ class TestFitIndexerOnModels:
     """Tests for fit_indexer_on_models function."""
     
     def test_raises_error_without_indexer(self, sample_dataframe):
-        """Verify that function raises error when indexer is not defined."""
+        """Verify that function requires indexer as a parameter."""
         train_df, test_df = engineering.train_test_split(sample_dataframe)
         
-        # This function references undefined 'indexer' variable
-        with pytest.raises(NameError):
+        # The function now requires indexer as an explicit parameter
+        with pytest.raises(TypeError):
             engineering.fit_indexer_on_models(train_df, test_df)
 
 
@@ -285,11 +284,11 @@ class TestFitEncoderOnModels:
     """Tests for fit_encoder_on_models function."""
     
     def test_raises_error_without_encoder(self, sample_dataframe):
-        """Verify that function raises error when encoder is not defined."""
+        """Verify that function requires encoder as a parameter."""
         train_df, test_df = engineering.train_test_split(sample_dataframe)
         
-        # This function references undefined 'encoder' variable
-        with pytest.raises(NameError):
+        # The function now requires encoder as an explicit parameter
+        with pytest.raises(TypeError):
             engineering.fit_encoder_on_models(train_df, test_df)
 
 
@@ -349,14 +348,14 @@ class TestScaleDatasets:
     """Tests for scale_datasets function."""
     
     def test_function_has_undefined_variable_bug(self):
-        """Document that scale_datasets references undefined variables."""
-        # The function uses train_assembled and test_assembled which are not parameters
+        """Verify that scale_datasets no longer references undefined variables."""
+        # The function previously used train_assembled and test_assembled which were not parameters
         # It should use train_df and test_df parameters instead
         from pyspark.ml.feature import VectorAssembler
         import inspect
         
         source = inspect.getsource(engineering.scale_datasets)
-        assert "train_assembled" in source
+        assert "train_assembled" not in source
         assert "train_df" in source  # parameter name
     
     def test_scale_datasets_with_fixed_implementation(self, spark, sample_dataframe):

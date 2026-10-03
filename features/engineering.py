@@ -1,7 +1,7 @@
 import math
 import numpy as np
 import pandas as pd
-from pyspark.sql.functions import col, sin, cos, month, dayofweek, dayofyear, lit, create_map, when
+from pyspark.sql.functions import col, sin, cos, month, dayofyear, lit, create_map, when
 from pyspark.ml.feature import OneHotEncoder, StringIndexer, VectorAssembler, MinMaxScaler
 from sklearn.preprocessing import TargetEncoder
 from sklearn.feature_selection import RFE
@@ -12,32 +12,39 @@ import os, yaml
 import matplotlib.pyplot as plt
 
 
-
-
-
-# Functions
-''' train_test_split()
-    Purpose: Run train test split, display counts
-    Return:
-        train_df - Training dataset
-        test_df - Testing dataset
-'''
 def train_test_split(spark_df):
+    """Split a Spark DataFrame into 80/20 train and test sets (seed=42).
+
+    Args:
+        spark_df: Spark DataFrame to split.
+
+    Returns:
+        train_df: Training DataFrame (~80%).
+        test_df: Testing DataFrame (~20%).
+    """
     train_df, test_df = spark_df.randomSplit([0.8, 0.2], seed=42)
     print(f"Train: {train_df.count():,}  Test: {test_df.count():,}")
-
     return train_df, test_df
 
 
 
-''' encode_cyclical_dates()
-    Purpose: Encode cyclical dates using cos(), sin()
-    Parameters: train_df and test_df
-    Return:
-        - numerical_cols: Updated list of numerical columns (for scaling) 
-        - train_df and test_df with date fields replaced with cyclical dates
-'''
 def encode_cyclical_dates(numerical_cols, train_df, test_df):
+    """Encode ScheduledDay and AppointmentDay as cyclical sin/cos features.
+
+    Replaces the raw date columns with 8 derived features (month and
+    day-of-year sin/cos pairs for each date).  Raw columns are dropped
+    because VectorAssembler cannot handle date types.
+
+    Args:
+        numerical_cols: List of numeric feature column names to extend.
+        train_df: Training Spark DataFrame with ScheduledDay and AppointmentDay.
+        test_df: Testing Spark DataFrame with ScheduledDay and AppointmentDay.
+
+    Returns:
+        numerical_cols: Updated list with 8 cyclical features appended.
+        train_df: Transformed training DataFrame.
+        test_df: Transformed testing DataFrame.
+    """
 
     for df_name, df in [("train", train_df), ("test", test_df)]:
         df = (df
@@ -68,16 +75,23 @@ def encode_cyclical_dates(numerical_cols, train_df, test_df):
     return numerical_cols, train_df, test_df
 
 
-''' neighborhood_encoder()
-    Purpose: Encode neighborhood in numerical vector
-    Parameters:
-        numerical_cols: List of numeric cols
-        train_df
-        test_df
-    Return:
-    # TODO fill
-'''
 def neighborhood_encoder(numerical_cols, train_df, test_df):
+    """Target-encode the Neighborhood column using sklearn TargetEncoder.
+
+    Replaces each neighbourhood string with its mean no-show rate learned
+    from the training set.  Fit on train only to prevent leakage.  The raw
+    string column is dropped after encoding.
+
+    Args:
+        numerical_cols: List of numeric feature column names to extend.
+        train_df: Training Spark DataFrame with a "Neighborhood" column.
+        test_df: Testing Spark DataFrame with a "Neighborhood" column.
+
+    Returns:
+        numerical_cols: Updated list with "Neighborhood_te" appended.
+        train_df: Transformed training DataFrame.
+        test_df: Transformed testing DataFrame.
+    """
 
 
     # 1. Collect training data to pandas — fit encoder on train only
@@ -107,14 +121,19 @@ def neighborhood_encoder(numerical_cols, train_df, test_df):
 
 
 
-''' gender_encoder() 
-    Purpose: Encode gender to numeric vector
-    Return:
-        numerical_cols_with_gender - Numeric vector with values representing gender
-        indexer - String indices included 
-        encoder - Object after one-hot encoding
-'''
 def gender_encoder(numerical_cols):
+    """Create StringIndexer and OneHotEncoder stages for the Gender column.
+
+    Returns the stages unfitted so they can be fit on the training set later.
+
+    Args:
+        numerical_cols: List of numeric feature column names to extend.
+
+    Returns:
+        numerical_cols_with_gender: Updated list with "Gender_vec" appended.
+        indexer: StringIndexer for "Gender" → "Gender_index".
+        encoder: OneHotEncoder for "Gender_index" → "Gender_vec".
+    """
     # Encode only the 'Gender' column
     indexer = StringIndexer(inputCol="Gender", outputCol="Gender_index", handleInvalid="skip")
     encoder = OneHotEncoder(inputCol="Gender_index", outputCol="Gender_vec")
@@ -125,12 +144,18 @@ def gender_encoder(numerical_cols):
 
 
 
-''' fit_indexer_on_models()
-    Purpose: Fit indexer on train, transform both train and test
-    Param:
-    Return:
-'''
 def fit_indexer_on_models(train_df, test_df, indexer):
+    """Fit a StringIndexer on the training set and transform both splits.
+
+    Args:
+        train_df: Training Spark DataFrame.
+        test_df: Testing Spark DataFrame.
+        indexer: Unfitted StringIndexer instance.
+
+    Returns:
+        train_df_indexed: Transformed training DataFrame.
+        test_df_indexed: Transformed testing DataFrame.
+    """
     indexer_model = indexer.fit(train_df)
     train_df_indexed = indexer_model.transform(train_df)
     test_df_indexed = indexer_model.transform(test_df)
@@ -139,12 +164,18 @@ def fit_indexer_on_models(train_df, test_df, indexer):
 
 
 
-''' fit_encoder_on_models()
-    Purpose: Fit encoder on train, transform both train and test
-    Param:
-    Return:
-'''
 def fit_encoder_on_models(train_df, test_df, encoder):
+    """Fit an OneHotEncoder on the training set and transform both splits.
+
+    Args:
+        train_df: Training Spark DataFrame.
+        test_df: Testing Spark DataFrame.
+        encoder: Unfitted OneHotEncoder instance.
+
+    Returns:
+        train_df_encoded: Transformed training DataFrame.
+        test_df_encoded: Transformed testing DataFrame.
+    """
     # Fit encoder on train, transform both train and test
     encoder_model = encoder.fit(train_df)
     train_df_encoded = encoder_model.transform(train_df)
@@ -154,12 +185,19 @@ def fit_encoder_on_models(train_df, test_df, encoder):
 
 
 
-''' scale_datasets()
-    Purpose: Apply MinMaxScaler to train and test sets
-    Parameters
-    Return
-'''
-def scale_datasets(train_df,test_df):
+def scale_datasets(train_df, test_df):
+    """Apply MinMaxScaler to the "features" vector column of both splits.
+
+    Scaler is fit on the training set only to prevent leakage.
+
+    Args:
+        train_df: Training Spark DataFrame with a "features" vector column.
+        test_df: Testing Spark DataFrame with a "features" vector column.
+
+    Returns:
+        train_scaled: Scaled training DataFrame (adds "scaledFeatures").
+        test_scaled: Scaled testing DataFrame (adds "scaledFeatures").
+    """
     # Fit scaler on TRAIN only to prevent leakage
     scaler = MinMaxScaler(inputCol="features", outputCol="scaledFeatures")
     scalerModel = scaler.fit(train_df)
@@ -173,10 +211,21 @@ def scale_datasets(train_df,test_df):
 
 
 
-''' apply_class_weights()
-    Purpose: Handle class imbalance; Find count of no-show appointments and count of show appointments. find quotient and make weights.
-'''
 def apply_class_weights(train_scaled, test_scaled):
+    """Add a weightCol to handle class imbalance in the training set.
+
+    Computes show_count / no_show_count from the training data and assigns
+    that ratio as the weight for no-shows (minority class).  Shows receive
+    weight 1.0.
+
+    Args:
+        train_scaled: Training Spark DataFrame with a "Showed_up" column.
+        test_scaled: Testing Spark DataFrame (returned unchanged).
+
+    Returns:
+        train_scaled_with_weight: Training DataFrame with "weightCol" added.
+        test_scaled: Testing DataFrame (unchanged).
+    """
 
     no_show_count = train_scaled.filter(col("Showed_up") == 0).count()
     show_count = train_scaled.filter(col("Showed_up") == 1).count()
@@ -195,13 +244,17 @@ def apply_class_weights(train_scaled, test_scaled):
 
 
 
-''' load_tbl_from_config
-    Purpose: Return table loaded from file path in config file
-    Parameter: Object path, passed as string
-    Return: Spark dataframe containing bronze features, loaded from Unity Catalog table, at location
-        specified in the config.yaml file
-'''
 def load_tbl_from_config(object_name):
+    """Load a Spark DataFrame from a Unity Catalog table path in config.yaml.
+
+    Looks for ../config.yaml first, falling back to config.example.yaml.
+
+    Args:
+        object_name: Key in the config dict (e.g. "bronze_table_path").
+
+    Returns:
+        Spark DataFrame loaded from the table at the configured path.
+    """
     config_file = "../config.yaml" if os.path.exists("../config.yaml") else "config.example.yaml"
 
     with open(config_file) as f:
@@ -214,11 +267,15 @@ def load_tbl_from_config(object_name):
 
 
 
-'''determine_feature_importance
-    Purpose: Find improtant features
-    Return: None
-'''
 def determine_feature_importance(df):
+    """Plot a correlation heatmap and per-feature |correlation with target|.
+
+    Encodes categorical columns (Gender, Neighborhood, dates) into numeric
+    representations so they can be included in the correlation matrix.
+
+    Args:
+        df: Spark or pandas DataFrame with features and "Showed_up" target.
+    """
     pdf = df.toPandas() if hasattr(df, "toPandas") else df  # works for both Spark and pandas DataFrames
 
     # Encode Gender as numeric so it's included in the correlation matrix
@@ -271,21 +328,26 @@ def determine_feature_importance(df):
 
 
 
-''' recursive_feature_elimination()
-    Purpose: Use sklearn RFE to select the top N most important features from the scaled feature vector
-    Parameters:
-        train_scaled: Spark DataFrame with "scaledFeatures" vector column and "Showed_up" label
-        test_scaled: Spark DataFrame with "scaledFeatures" vector column
-        numerical_cols: List of feature names corresponding to the vector elements
-        n_features_to_select: Number of features to keep (default 5)
-    Return:
-        selected_features: List of selected feature names
-        X_train_rfe: pandas DataFrame with only the selected features (train)
-        X_test_rfe: pandas DataFrame with only the selected features (test)
-        y_train: pandas Series of training labels
-        y_test: pandas Series of test labels
-'''
 def recursive_feature_elimination(train_scaled, test_scaled, numerical_cols, n_features_to_select=5):
+    """Use sklearn RFE to select the top N most important features.
+
+    Collects scaled feature vectors and labels to pandas, expands the vector
+    into individual columns, then runs RFE with a balanced-weights Logistic
+    Regression as the base estimator.
+
+    Args:
+        train_scaled: Spark DataFrame with "scaledFeatures" vector and "Showed_up" label.
+        test_scaled: Spark DataFrame with "scaledFeatures" vector and "Showed_up" label.
+        numerical_cols: List of feature names corresponding to the vector elements.
+        n_features_to_select: Number of features to keep (default 5).
+
+    Returns:
+        selected_features: List of selected feature names.
+        X_train_rfe: pandas DataFrame with only the selected features (train).
+        X_test_rfe: pandas DataFrame with only the selected features (test).
+        y_train: pandas Series of training labels.
+        y_test: pandas Series of test labels.
+    """
     # Collect scaled feature vectors and labels to pandas
     train_pd = train_scaled.select("scaledFeatures", "Showed_up").toPandas()
     test_pd  = test_scaled.select("scaledFeatures", "Showed_up").toPandas()
@@ -319,14 +381,10 @@ def recursive_feature_elimination(train_scaled, test_scaled, numerical_cols, n_f
 
 
 
-# Entry point - only runs when executed directly, not when imported
+# Entry point — only runs when executed directly, not when imported
 if __name__ == "__main__":
-
     silver_df = load_tbl_from_config("silver_table_path")
-
     determine_feature_importance(silver_df)
-
-    # silver_df = spark.table(silver_table_path)
 
     train_df, test_df = train_test_split(silver_df)
 
@@ -370,5 +428,4 @@ if __name__ == "__main__":
     train_scaled, test_scaled = scale_datasets(train_assembled,test_assembled)
 
     # Handle class imbalance
-    # Find count of no-show appointments and count of show appointments. find quotient and make weights.
     train_scaled, test_scaled = apply_class_weights(train_scaled, test_scaled)
