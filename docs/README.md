@@ -2,6 +2,18 @@
 
 An end-to-end ML pipeline on Databricks that predicts whether patients will attend their scheduled medical appointments. The pipeline covers data loading, feature engineering, model training with hyperparameter tuning, MLflow experiment tracking, and automatic promotion of the best model to a production alias.
 
+**Problem:** When patients miss appointments, clinics lose billable slots and waste clinical resources — predicting no-shows in advance lets staff overbook or send targeted reminders.
+
+| Metric | Random Forest (Champion) | Logistic Regression (Baseline) |
+|---|---|---|
+| PR-AUC | 0.9143 | 0.8837 |
+| No-show Recall | — | 0.3121 |
+| No-show Precision | — | 0.3705 |
+| F1 (weighted) | 0.7496 | 0.7446 |
+
+PR-AUC measures how well the model ranks no-show risk across all thresholds, recall measures the fraction of actual no-shows caught, precision measures how many flagged patients truly miss, and F1 balances precision and recall.
+
+---
 
 ## Dataset
 
