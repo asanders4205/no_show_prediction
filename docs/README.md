@@ -118,6 +118,24 @@ The pipeline trains two models with the same train/test split, same features, an
 
 The Random Forest outperforms the Logistic Regression baseline on both PR-AUC (+0.0306) and weighted F1 (+0.0050). The LR baseline's no-show recall of 0.31 means ~69% of actual no-shows go undetected — the RF model partially addresses this through non-linear feature interactions.
 
+### Evaluation Plots
+
+**ROC and Precision-Recall Curves** — both models compared against baselines. The RF model's higher PR-AUC (0.9143 vs 0.8837) reflects better ranking of no-show risk across all thresholds.
+
+![ROC and PR curves](images/roc_pr_curves.png)
+
+**Confusion Matrices** — classification results at each model's tuned threshold (RF: 0.30, LR: 0.55).
+
+![Confusion matrices at tuned thresholds](images/confusion_matrices.png)
+
+**Random Forest Feature Importance** — Gini importance of the 12 RFE-selected features. `date_diff` dominates (0.594), confirming that lead time between booking and appointment is the strongest no-show predictor.
+
+![RF feature importance](images/rf_feature_importance.png)
+
+**Calibration Curves** — predicted vs actual show-up rates. Both models are well-calibrated in the mid-range; deviations at the extremes reflect the class imbalance.
+
+![Calibration curves](images/calibration_curves.png)
+
 *GBTClassifier is planned as a future model in the progression.*
 
 ---
