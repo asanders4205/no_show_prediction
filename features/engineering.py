@@ -487,8 +487,11 @@ if __name__ == "__main__":
     # Handle class imbalance (weights computed from train only)
     train_scaled, val_scaled, test_scaled = apply_class_weights(train_scaled, test_scaled, val_df=val_scaled)
 
-    # Write all three tables to Unity Catalog
-    train_scaled.write.mode("overwrite").saveAsTable(cfg["train_scaled_dataset_path"])
-    val_scaled.write.mode("overwrite").saveAsTable(cfg["val_scaled_dataset_path"])
-    test_scaled.write.mode("overwrite").saveAsTable(cfg["test_scaled_dataset_path"])
+    # Write all three tables to Unity Catalog.
+    # overwriteSchema: the test table was originally written without weightCol;
+    # after apply_class_weights was fixed to weight all three splits, its schema
+    # legitimately changed, so a plain overwrite is rejected as a mismatch.
+    train_scaled.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(cfg["train_scaled_dataset_path"])
+    val_scaled.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(cfg["val_scaled_dataset_path"])
+    test_scaled.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(cfg["test_scaled_dataset_path"])
     print(f"Tables written: train ({train_scaled.count():,}), val ({val_scaled.count():,}), test ({test_scaled.count():,})")
