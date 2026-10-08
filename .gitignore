@@ -3,3 +3,6 @@ config.yaml
 
 # Cache
 .pytest_cache
+
+# Individual documentation
+docs/leakage_fix.md
