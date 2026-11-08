@@ -220,7 +220,6 @@ def fit_encoder_on_models(train_df, test_df, encoder, val_df=None):
     return train_df_encoded, test_df_encoded
 
 
-
 def scale_datasets(train_df, test_df, val_df=None):
     """Apply MinMaxScaler to the "features" vector column of both splits.
 
@@ -430,6 +429,21 @@ def recursive_feature_elimination(train_scaled, test_scaled, numerical_cols, n_f
 
     return selected_features, X_train_rfe, X_test_rfe, y_train, y_test
 
+
+
+
+
+
+
+""" Define new feature - Previous history of no-shows
+    Input: Input df (presumably training data)
+    Output: Input dataset with additional column (has_noshow_history)
+"""
+def calculate_previous_no-show_history(input_df):
+    no_show_counts = spark.sql("SELECT PatientId, COUNT(*) AS patient_no_show_total_count
+    FROM input_df
+    WHERE Showed_up != 'true'
+    GROUP BY PatientId")
 
 
 
