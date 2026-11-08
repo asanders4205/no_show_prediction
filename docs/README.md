@@ -6,10 +6,10 @@ An end-to-end ML pipeline on Databricks that predicts whether patients will atte
 
 | Metric | Random Forest (Champion) | Logistic Regression (Baseline) |
 |---|---|---|
-| PR-AUC | 0.9143 | 0.8837 |
-| No-show Recall | — | 0.3121 |
-| No-show Precision | — | 0.3705 |
-| F1 (weighted) | 0.7496 | 0.7446 |
+| PR-AUC | 0.9157 | 0.8837 |
+| No-show Recall | 0.2578 | 0.3121 |
+| No-show Precision | 0.4330 | 0.3705 |
+| F1 (weighted) | 0.7584 | 0.7446 |
 
 PR-AUC measures how well the model ranks no-show risk across all thresholds, recall measures the fraction of actual no-shows caught, precision measures how many flagged patients truly miss, and F1 balances precision and recall.
 
@@ -58,13 +58,13 @@ Data Preprocessing
 Feature Engineering
         * Compute date_diff (days between scheduling and appointment)
         * Determine feature importance
-        * 80/20 train/test split (seed=42)
+        * 60/20/20 train/validation/test split (seed=42, performed before any encoder or scaler fitting)
         * Class imbalance handling (weightCol ≈ 4:1 for minority class)
         * Cyclical Date Encoding  →  sin/cos encoding for ScheduledDay & AppointmentDay (8 features: month + day-of-year sin/cos per date)
         * Encode Neighborhood as a numeric vector with TargetEncoder (~81 values)
         * Encode Gender similarly with StringIndexer + OneHotEncoder
-        * Fit indexer and encoder on models
-        * Scale train and test sets with MinMaxScaler
+        * Fit indexer, encoder, and scaler on the train split only
+        * Scale train, validation, and test sets with MinMaxScaler
         * Apply class weights to handle imbalance (ratio of Maj to Min classes)
 Model training
         * Select N most relevant features using Recursive Feature Elimination
@@ -102,29 +102,32 @@ The pipeline trains two models with the same train/test split, same features, an
 | Model | Tuning Strategy | Hyperparameters | RFE Features | CV Evaluator | Threshold | Purpose |
 |---|---|---|---|---|---|---|
 | `LogisticRegression` | CrossValidator 3-fold, parallelism=6 | `elasticNetParam` ∈ {0, 0.5, 1.0}<br>`regParam` ∈ {0.001, 0.01, 0.05, 0.1, 0.5}<br>`maxIter` ∈ {100, 500, 1000} | 7 | AUC | 0.55 | Interpretable baseline |
-| `RandomForestClassifier` | CrossValidator 3-fold, parallelism=4 | `numTrees` = 10<br>`maxDepth` = 10<br>`minInstancesPerNode` = 20<br>`featureSubsetStrategy` = sqrt | 12 | F1 (weighted) | 0.30 | Champion model |
+| `RandomForestClassifier` | CrossValidator 3-fold, parallelism=4 | `numTrees` = 100<br>`maxDepth` ∈ {10, 12, 15}<br>`minInstancesPerNode` ∈ {5, 20}<br>`featureSubsetStrategy` ∈ {sqrt, log2} | 12 | F1 (weighted) | 0.35 | Champion model |
 
 **Selection metric:** PR-AUC (Average Precision) — chosen over ROC-AUC for sensitivity to class imbalance  
 **Random seed:** 42 for reproducibility
 
 ### Results
 
+Random Forest figures below are from the most recent training run (Nov 7, 2026 job run of `models/random_forest`, ~17 min on serverless), which registered `noshows_random_forest` version 20 and holds the `@champion` alias. Threshold 0.35 was tuned on the validation set, not test. Logistic Regression figures predate the Oct 2026 leakage fix and do not reflect the current registry state — refresh pending.
+
 | Metric | Random Forest (Champion) | Logistic Regression (Baseline) |
 |---|---|---|
-| PR-AUC | 0.9143 | 0.8837 |
-| F1 (weighted) | 0.7496 | 0.7446 |
-| Best Threshold | 0.30 | 0.55 |
-| No-show Recall (Class 0) | — | 0.3121 |
+| PR-AUC | 0.9157 | 0.8837 |
+| F1 (weighted) | 0.7584 | 0.7446 |
+| Best Threshold | 0.35 | 0.55 |
+| No-show Recall (Class 0) | 0.2578 | 0.3121 |
+| No-show Precision (Class 0) | 0.4330 | 0.3705 |
 
-The Random Forest outperforms the Logistic Regression baseline on both PR-AUC (+0.0306) and weighted F1 (+0.0050). The LR baseline's no-show recall of 0.31 means ~69% of actual no-shows go undetected — the RF model partially addresses this through non-linear feature interactions.
+The Random Forest outperforms the Logistic Regression baseline on both PR-AUC (+0.0320) and weighted F1 (+0.0038). At the F1-optimal threshold the RF model catches ~26% of actual no-shows (recall 0.2578, precision 0.4330, no-show F1 0.3232) — non-linear feature interactions buy ranking quality (PR-AUC), while a lower decision threshold can trade precision for more caught no-shows. Other test metrics: ROC-AUC 0.7326, accuracy 0.7808. Test confusion matrix at threshold 0.35 (rows = actual Showed_up 1 / 0, columns = predicted 1 / 0): 15,727 / 1,480 / 3,253 / 1,130.
 
 ### Evaluation Plots
 
-**ROC and Precision-Recall Curves** — both models compared against baselines. The RF model's higher PR-AUC (0.9143 vs 0.8837) reflects better ranking of no-show risk across all thresholds.
+**ROC and Precision-Recall Curves** — both models compared against baselines. The RF model's higher PR-AUC (0.9157 vs 0.8837) reflects better ranking of no-show risk across all thresholds.
 
 ![ROC and PR curves](images/roc_pr_curves.png)
 
-**Confusion Matrices** — classification results at each model's tuned threshold (RF: 0.30, LR: 0.55).
+**Confusion Matrices** — classification results at each model's tuned threshold (RF: 0.35, LR: 0.55).
 
 ![Confusion matrices at tuned thresholds](images/confusion_matrices.png)
 
