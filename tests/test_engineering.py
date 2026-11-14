@@ -2,12 +2,14 @@
 
 import pytest
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
 from pyspark.sql.types import (
     StructType,
     StructField,
     IntegerType,
     StringType,
     DoubleType,
+    BooleanType,
     DateType,
 )
 from datetime import date
@@ -499,3 +501,147 @@ class TestApplyClassWeights:
         
         # Test set should not have weights
         assert "weightCol" not in test_result.columns
+
+
+class TestPatientNoShowHistory:
+    """Tests for patient_no_show_history function (point-in-time prior history)."""
+
+    @pytest.fixture
+    def bronze_history_df(self, spark):
+        """Bronze-style table: keeps PatientId, AppointmentID, AppointmentDay, boolean Showed_up."""
+        schema = StructType([
+            StructField("PatientId", DoubleType(), True),
+            StructField("AppointmentID", IntegerType(), True),
+            StructField("AppointmentDay", DateType(), True),
+            StructField("Showed_up", BooleanType(), True),
+        ])
+        data = [
+            # Patient 1: five appointments, including two same-day pairs
+            (1.0, 101, date(2023, 1, 1), True),
+            (1.0, 102, date(2023, 1, 1), False),
+            (1.0, 103, date(2023, 1, 5), False),
+            (1.0, 104, date(2023, 1, 10), True),
+            (1.0, 105, date(2023, 1, 10), False),
+            # Patient 2: single appointment (cold start)
+            (2.0, 201, date(2023, 2, 1), False),
+            # Patient 3: unknown outcome, then show, then no-show
+            (3.0, 301, date(2023, 3, 1), None),
+            (3.0, 302, date(2023, 3, 8), True),
+            (3.0, 303, date(2023, 3, 15), False),
+        ]
+        return spark.createDataFrame(data, schema)
+
+    @pytest.fixture
+    def silver_history_df(self, spark):
+        """Silver-style table: no PatientId, joined back via AppointmentID.
+        AppointmentID 999 has no bronze counterpart (left-join miss)."""
+        schema = StructType([
+            StructField("AppointmentID", DoubleType(), True),
+            StructField("Age", DoubleType(), True),
+            StructField("Showed_up", DoubleType(), True),
+        ])
+        data = [
+            (101.0, 30.0, 1.0), (102.0, 31.0, 0.0), (103.0, 32.0, 0.0),
+            (104.0, 33.0, 1.0), (105.0, 34.0, 0.0),
+            (201.0, 40.0, 0.0),
+            (301.0, 50.0, 1.0), (302.0, 51.0, 1.0), (303.0, 52.0, 0.0),
+            (999.0, 60.0, 1.0),
+        ]
+        return spark.createDataFrame(data, schema)
+
+    @staticmethod
+    def _history_of(df, appt_id):
+        """Return the single history row for an AppointmentID."""
+        rows = (df.filter(col("AppointmentID") == appt_id)
+                .select("prior_appointments", "prior_no_shows",
+                        "prior_no_show_ratio", "has_history")
+                .collect())
+        assert len(rows) == 1, f"expected exactly 1 row for AppointmentID {appt_id}"
+        return rows[0]
+
+    def test_appends_features_to_numerical_cols(self, silver_history_df, bronze_history_df):
+        """Verify the 4 history features are appended to the returned list."""
+        cols_out, _ = engineering.patient_no_show_history(
+            ["Age"], silver_history_df, bronze_history_df)
+        assert cols_out == ["Age", "prior_appointments", "prior_no_shows",
+                            "prior_no_show_ratio", "has_history"]
+
+    def test_does_not_mutate_input_list(self, silver_history_df, bronze_history_df):
+        """Verify the caller's numerical_cols list is not mutated (docstring contract)."""
+        original = ["Age"]
+        _, _ = engineering.patient_no_show_history(
+            original, silver_history_df, bronze_history_df)
+        assert original == ["Age"]
+
+    def test_adds_history_columns_and_preserves_rows(self, silver_history_df, bronze_history_df):
+        """Verify the 4 columns exist and every silver row survives the join."""
+        _, out = engineering.patient_no_show_history(
+            ["Age"], silver_history_df, bronze_history_df)
+        for c in ["prior_appointments", "prior_no_shows",
+                  "prior_no_show_ratio", "has_history"]:
+            assert c in out.columns
+        assert out.count() == silver_history_df.count()
+
+    def test_same_day_appointments_do_not_see_each_other(self, silver_history_df, bronze_history_df):
+        """Verify same-day appointments share the same (strictly earlier) history."""
+        _, out = engineering.patient_no_show_history(
+            ["Age"], silver_history_df, bronze_history_df)
+        for appt_id in (101, 102):  # both on 2023-01-01, no earlier history
+            row = self._history_of(out, appt_id)
+            assert row.prior_appointments == 0
+            assert row.prior_no_shows == 0
+            assert row.prior_no_show_ratio == 0.0
+            assert row.has_history == 0.0
+
+    def test_prior_counts_use_strictly_earlier_days(self, silver_history_df, bronze_history_df):
+        """Verify counts include only earlier appointment days (no future leakage)."""
+        _, out = engineering.patient_no_show_history(
+            ["Age"], silver_history_df, bronze_history_df)
+        # 103 (2023-01-05): priors are 101 + 102, of which one no-show (102)
+        row = self._history_of(out, 103)
+        assert row.prior_appointments == 2
+        assert row.prior_no_shows == 1
+        assert row.prior_no_show_ratio == pytest.approx(0.5)
+        assert row.has_history == 1.0
+        # 104/105 (2023-01-10): priors are 101+102+103, two no-shows.
+        # A naive TOTAL no-show count would report 3 here (future leakage).
+        for appt_id in (104, 105):
+            row = self._history_of(out, appt_id)
+            assert row.prior_appointments == 3
+            assert row.prior_no_shows == 2
+            assert row.prior_no_show_ratio == pytest.approx(2.0 / 3.0)
+            assert row.has_history == 1.0
+
+    def test_cold_start_patient_gets_zero_history(self, silver_history_df, bronze_history_df):
+        """Verify a first-time patient gets zeros and has_history = 0."""
+        _, out = engineering.patient_no_show_history(
+            ["Age"], silver_history_df, bronze_history_df)
+        row = self._history_of(out, 201)
+        assert row.prior_appointments == 0
+        assert row.prior_no_shows == 0
+        assert row.prior_no_show_ratio == 0.0
+        assert row.has_history == 0.0
+
+    def test_clean_record_distinguished_from_no_record(self, silver_history_df, bronze_history_df):
+        """Verify null outcomes count as neither shows nor no-shows, and that
+        a clean record (has_history=1, ratio 0.0) differs from no record."""
+        _, out = engineering.patient_no_show_history(
+            ["Age"], silver_history_df, bronze_history_df)
+        # 301's null outcome is not counted, so 302 still has no prior history
+        assert self._history_of(out, 302).prior_appointments == 0
+        # 303: prior is 302 only (a show) — clean record, not no record
+        row = self._history_of(out, 303)
+        assert row.prior_appointments == 1
+        assert row.prior_no_shows == 0
+        assert row.prior_no_show_ratio == 0.0
+        assert row.has_history == 1.0
+
+    def test_silver_row_without_bronze_match_gets_zero_history(self, silver_history_df, bronze_history_df):
+        """Verify silver rows missing from bronze (left-join miss) get cold-start values."""
+        _, out = engineering.patient_no_show_history(
+            ["Age"], silver_history_df, bronze_history_df)
+        row = self._history_of(out, 999)
+        assert row.prior_appointments == 0
+        assert row.prior_no_shows == 0
+        assert row.prior_no_show_ratio == 0.0
+        assert row.has_history == 0.0

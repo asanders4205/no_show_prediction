@@ -1,7 +1,8 @@
 import math
 import numpy as np
 import pandas as pd
-from pyspark.sql.functions import col, sin, cos, month, dayofyear, lit, create_map, when
+from pyspark.sql.functions import col, sin, cos, month, dayofyear, lit, create_map, when, coalesce, sum as spark_sum, unix_date
+from pyspark.sql import Window
 from pyspark.ml.feature import OneHotEncoder, StringIndexer, VectorAssembler, MinMaxScaler
 from sklearn.preprocessing import TargetEncoder
 from sklearn.feature_selection import RFE
@@ -104,8 +105,10 @@ def encode_cyclical_dates(numerical_cols, train_df, test_df, val_df=None):
 def neighborhood_encoder(numerical_cols, train_df, test_df, val_df=None):
     """Target-encode the Neighborhood column using sklearn TargetEncoder.
 
-    Replaces each neighbourhood string with its mean no-show rate learned
-    from the training set.  Fit on train only to prevent leakage.  The raw
+    Replaces each neighbourhood string with its mean show-up rate learned
+    from the training set (the TargetEncoder is fit on the Showed_up label,
+    so higher values mean the neighbourhood historically shows up more).
+    Fit on train only to prevent leakage.  The raw
     string column is dropped after encoding.
 
     Args:
@@ -318,6 +321,87 @@ def load_tbl_from_config(object_name):
 
 
 
+def patient_no_show_history(numerical_cols, silver_df, bronze_df=None):
+    """Add point-in-time prior no-show history features per patient.
+
+    For each appointment, counts the patient's previously completed
+    appointments (strictly earlier AppointmentDay — same-day
+    appointments never see each other's outcomes) and how many of those
+    were no-shows.  Silver drops PatientId, so history is computed on the
+    bronze table (which keeps it) and joined back via AppointmentID.
+
+    This is a deterministic temporal derivation, not a fitted transform —
+    like the cyclical date features it is safe to compute on the full
+    dataset BEFORE the train/val/test split: a patient's past record is
+    genuinely known at prediction time regardless of which split those
+    past rows landed in.  A naive per-patient TOTAL no-show count would
+    leak future outcomes and must never be used.
+
+    Cold-start patients (no prior completed appointments) get
+    prior_no_show_ratio = 0.0 and has_history = 0, so the model can
+    distinguish "no record" from "clean record".
+
+    Args:
+        numerical_cols: List of numeric feature column names to extend.
+            NOT mutated in place by this function.
+        silver_df: Silver Spark DataFrame with AppointmentID (no PatientId).
+        bronze_df: Bronze Spark DataFrame with PatientId, AppointmentID,
+            AppointmentDay and boolean Showed_up.  Loaded from
+            config.yaml ("bronze_table_path") when None.
+
+    Returns:
+        numerical_cols: Updated list with the 4 history features appended.
+        silver_df: Silver DataFrame with prior_appointments, prior_no_shows,
+            prior_no_show_ratio and has_history added.
+    """
+    if bronze_df is None:
+        bronze_df = load_tbl_from_config("bronze_table_path")
+
+    # RANGE frame ordered on unix_date (days since epoch), ending one day
+    # before the current row: includes only strictly earlier appointment
+    # days, so the feature is deterministic even when a patient has
+    # several same-day appointments.  (unix_date, not cast("long") —
+    # Spark does not allow casting DATE directly to BIGINT.)
+    w = (Window.partitionBy("PatientId")
+         .orderBy(unix_date(col("AppointmentDay")))
+         .rangeBetween(Window.unboundedPreceding, -1))
+
+    # A prior appointment only counts when its outcome is known
+    # (non-null Showed_up); unknown outcomes count as neither shows
+    # nor no-shows.  Note sum() over an empty window frame is NULL,
+    # which the coalesce below turns into 0.
+    history = (
+        bronze_df
+        .withColumns({
+            "prior_appointments": spark_sum(when(col("Showed_up").isNotNull(), 1).otherwise(0)).over(w),
+            "prior_no_shows": spark_sum(when(~col("Showed_up"), 1).otherwise(0)).over(w),
+        })
+        .select(
+            col("AppointmentID").cast("double").alias("_bronze_appt_id"),
+            "prior_appointments",
+            "prior_no_shows",
+        )
+    )
+
+    # Join back to silver on AppointmentID (unique per appointment, 1:1).
+    silver_df = (
+        silver_df
+        .join(history, silver_df["AppointmentID"] == history["_bronze_appt_id"], "left")
+        .drop("_bronze_appt_id")
+        .withColumn("prior_appointments", coalesce(col("prior_appointments"), lit(0)))
+        .withColumn("prior_no_shows", coalesce(col("prior_no_shows"), lit(0)))
+        .withColumn("prior_no_show_ratio",
+                    when(col("prior_appointments") > 0,
+                         col("prior_no_shows") / col("prior_appointments"))
+                    .otherwise(0.0))
+        .withColumn("has_history", when(col("prior_appointments") > 0, 1.0).otherwise(0.0))
+    )
+
+    numerical_cols = numerical_cols + ["prior_appointments", "prior_no_shows",
+                                      "prior_no_show_ratio", "has_history"]
+    return numerical_cols, silver_df
+
+
 def determine_feature_importance(df):
     """Plot a correlation heatmap and per-feature |correlation with target|.
 
@@ -403,10 +487,21 @@ def recursive_feature_elimination(train_scaled, test_scaled, numerical_cols, n_f
     train_pd = train_scaled.select("scaledFeatures", "Showed_up").toPandas()
     test_pd  = test_scaled.select("scaledFeatures", "Showed_up").toPandas()
 
-    # Expand the DenseVector / SparseVector "scaledFeatures" into individual columns
-    X_train = pd.DataFrame(train_pd["scaledFeatures"].tolist(), columns=numerical_cols)
+    # Expand the DenseVector / SparseVector "scaledFeatures" into individual
+    # columns. pandas auto-expands DenseVector elements but treats SparseVector
+    # as an opaque scalar ("Shape of passed values is (N, 1)" ValueError), so
+    # call toArray() explicitly to handle both storage formats.
+    X_train = pd.DataFrame(
+        [v.toArray().tolist() if hasattr(v, "toArray") else list(v)
+         for v in train_pd["scaledFeatures"]],
+        columns=numerical_cols,
+    )
     y_train = train_pd["Showed_up"]
-    X_test  = pd.DataFrame(test_pd["scaledFeatures"].tolist(), columns=numerical_cols)
+    X_test  = pd.DataFrame(
+        [v.toArray().tolist() if hasattr(v, "toArray") else list(v)
+         for v in test_pd["scaledFeatures"]],
+        columns=numerical_cols,
+    )
     y_test  = test_pd["Showed_up"]
 
     # Base estimator: sklearn LogisticRegression with class weights to handle imbalance
@@ -435,15 +530,6 @@ def recursive_feature_elimination(train_scaled, test_scaled, numerical_cols, n_f
 
 
 
-""" Define new feature - Previous history of no-shows
-    Input: Input df (presumably training data)
-    Output: Input dataset with additional column (has_noshow_history)
-"""
-def calculate_previous_no-show_history(input_df):
-    no_show_counts = spark.sql("SELECT PatientId, COUNT(*) AS patient_no_show_total_count
-    FROM input_df
-    WHERE Showed_up != 'true'
-    GROUP BY PatientId")
 
 
 
@@ -454,13 +540,18 @@ if __name__ == "__main__":
         cfg = yaml.safe_load(f)
 
     silver_df = load_tbl_from_config("silver_table_path")
-    determine_feature_importance(silver_df)
-
-    train_df, val_df, test_df = train_val_test_split(silver_df)
 
     # Base numeric features (cast to double, IDs and target excluded)
     numerical_cols = ["Age", "Scholarship", "Hypertension", "Diabetes",
                       "Alcoholism", "Handicap", "SMS_received", "date_diff"]
+
+    # Prior no-show history (deterministic point-in-time derivation on
+    # bronze — not a fitted transform, so safe before the split)
+    numerical_cols, silver_df = patient_no_show_history(numerical_cols, silver_df)
+
+    determine_feature_importance(silver_df)
+
+    train_df, val_df, test_df = train_val_test_split(silver_df)
 
 
     # Encode cyclical dates (deterministic — no fitting, safe for all splits)

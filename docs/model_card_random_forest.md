@@ -6,7 +6,7 @@
 
 # Model Card for No-Show Prediction (Random Forest)
 
-A Random Forest binary classifier that predicts whether a patient will attend or miss their medical appointment. Trained on ~107K appointment records using PySpark ML on Databricks, with cyclical date encoding, target-encoded neighbourhoods, and class-weight balancing for the ~4:1 show/no-show imbalance.
+A Random Forest binary classifier that predicts whether a patient will attend or miss their medical appointment. Trained on ~107K appointment records using PySpark ML on Databricks, with cyclical date encoding, target-encoded neighbourhoods, point-in-time patient no-show history features, and class-weight balancing for the ~4:1 show/no-show imbalance.
 
 ## Model Details
 
@@ -14,11 +14,11 @@ A Random Forest binary classifier that predicts whether a patient will attend or
 
 <!-- Provide a longer summary of what this model is. -->
 
-This model predicts patient no-shows for medical appointments. It uses a Random Forest classifier trained on a dataset of 110,527 appointments from the Brazilian public health system (Kaggle "Medical Appointment No Shows"). Features include patient demographics (Age, Gender), health conditions (Hypertension, Diabetes, Alcoholism, Handicap), welfare enrolment (Scholarship), SMS reminders, days between scheduling and appointment (date_diff), and cyclical encodings of the scheduling and appointment dates. Neighbourhood (~81 distinct values) is target-encoded using the training-set no-show rate. Recursive Feature Elimination (RFE) selects the top 12 features from 18 candidates.
+This model predicts patient no-shows for medical appointments. It uses a Random Forest classifier trained on a dataset of 110,527 appointments from the Brazilian public health system (Kaggle "Medical Appointment No Shows"). Features include patient demographics (Age, Gender), health conditions (Hypertension, Diabetes, Alcoholism, Handicap), welfare enrolment (Scholarship), SMS reminders, days between scheduling and appointment (date_diff), and cyclical encodings of the scheduling and appointment dates. Neighbourhood (~81 distinct values) is target-encoded using the training-set mean show-up rate. Point-in-time patient no-show history (prior appointments, prior no-shows, no-show ratio, has-history flag) is derived from `PatientId` on the bronze table using only strictly earlier appointment days. Recursive Feature Elimination (RFE) selects the top 12 features from 22 candidates.
 
-Class imbalance is addressed via a `weightCol` where no-show samples receive a weight of ~4.0 (the majority-to-minority ratio) and show samples receive 1.0. The decision threshold was tuned via an F1 sweep rather than using the default 0.5 cutoff.
+Class imbalance is addressed via a `weightCol` where no-show samples receive a weight of ~3.95 (the majority-to-minority ratio) and show samples receive 1.0. The decision threshold was tuned via an F1 sweep rather than using the default 0.5 cutoff.
 
-A Logistic Regression baseline (PR-AUC 0.8837, F1 0.7446) was also trained on the same features for comparison.
+A Logistic Regression baseline (PR-AUC 0.8879, F1 0.7430) was also trained on the same features for comparison.
 
 - **Developed by:** Alec Sanders
 - **Funded by [optional]:** N/A — personal learning project
@@ -67,7 +67,7 @@ The model could be embedded in a clinic scheduling system to flag appointments a
 - **Geographic bias:** The training data originates from a single Brazilian public health system. Appointment attendance patterns are influenced by local infrastructure, culture, and economics. Results may not generalise to other regions or healthcare systems.
 - **Socioeconomic bias:** The `Scholarship` feature (Bolsa Familia welfare enrolment) and `Neighborhood` target encoding encode socioeconomic information. The model may learn patterns that disproportionately flag patients from lower-income areas as no-show risks.
 - **Class imbalance:** The dataset is ~80% show / ~20% no-show. While `weightCol` mitigates this during training, the model may still underperform on the no-show class in absolute terms (no-show recall is a known limitation — see Results).
-- **False positive cost:** A false positive (patient predicted as no-show who would have attended) carries a high cost: the appointment slot may be given away, the patient may face administrative burden or no-show fees, and the clinic may suffer reputational harm. The model is tuned with a threshold of 0.30 to optimise for F1 and precision, reducing but not eliminating this risk.
+- **False positive cost:** A false positive (patient predicted as no-show who would have attended) carries a high cost: the appointment slot may be given away, the patient may face administrative burden or no-show fees, and the clinic may suffer reputational harm. The model is tuned with a threshold of 0.35 to optimise for F1 and precision, reducing but not eliminating this risk.
 - **Data vintage:** The dataset is a static snapshot. Seasonal trends, policy changes, or post-pandemic behaviour shifts are not captured.
 - **No protected-attribute audit:** The model has not been formally audited for fairness across age, gender, or neighbourhood subgroups.
 
@@ -97,7 +97,7 @@ predictions = model.transform(new_appointments_df)
 
 # The model outputs a 'probability' column (vector of [P(no-show), P(show)])
 # and a 'prediction' column (0 = no-show, 1 = showed up).
-# A tuned threshold of 0.30 was used during development — adjust as needed.
+# A tuned threshold of 0.35 was used during development — adjust as needed.
 ```
 
 ## Training Details
@@ -106,10 +106,11 @@ predictions = model.transform(new_appointments_df)
 
 <!-- This should link to a Dataset Card, perhaps with a short stub of information on what the training data is all about as well as documentation related to data pre-processing or additional filtering. -->
 
-The training data is the "Medical Appointment No Shows" dataset from Kaggle, containing 110,527 appointment records. After an explicit `StructType` schema load and column renaming (`Neighbourhood` → `Neighborhood`, `Hipertension` → `Hypertension`), the data was split 80/20 (seed=42) into:
+The training data is the "Medical Appointment No Shows" dataset from Kaggle, containing 110,527 appointment records. After an explicit `StructType` schema load and column renaming (`Neighbourhood` → `Neighborhood`, `Hipertension` → `Hypertension`), the data was split 60/20/20 into train/validation/test (seed=42, split performed before any encoder or scaler fitting):
 
-- **Training set:** 85,397 rows (26 columns including weightCol and scaledFeatures vector)
-- **Test set:** 21,590 rows (25 columns)
+- **Training set:** 64,176 rows (30 columns including weightCol and scaledFeatures vector)
+- **Validation set:** 21,221 rows (used for CrossValidator and threshold tuning)
+- **Test set:** 21,590 rows (held out for final evaluation only)
 
 Raw columns: `PatientId`, `AppointmentID` (dropped), `Gender`, `ScheduledDay`, `AppointmentDay`, `Age`, `Neighborhood`, `Scholarship`, `Hypertension`, `Diabetes`, `Alcoholism`, `Handicap`, `SMS_received`, `Showed_up` (target).
 
@@ -126,14 +127,15 @@ Source file: See `dataset_path` in `config.yaml`
 3. **Type casting:** `Showed_up` (bool → double) as `labelCol`. All feature columns cast to appropriate numeric types.
 4. **Null audit:** Columns with >60% nulls flagged and dropped.
 5. **Cyclical date encoding:** `ScheduledDay` and `AppointmentDay` transformed into 8 sin/cos features (month, day-of-year for each). Raw date columns dropped.
-6. **Neighbourhood target encoding:** sklearn `TargetEncoder` (binary, smooth="auto") fit on the training set only to prevent leakage. Encoded value = mean no-show rate per neighbourhood.
+6. **Neighbourhood target encoding:** sklearn `TargetEncoder` (binary, smooth="auto") fit on the training set only to prevent leakage. Encoded value = mean show-up rate per neighbourhood (fit on `Showed_up`).
 7. **Gender encoding:** `StringIndexer` → `OneHotEncoder` (2 values, OHE appropriate).
-8. **Vector assembly:** All features assembled into a `features` vector column.
-9. **Min-Max scaling:** `MinMaxScaler` fit on training data only, applied to both splits.
-10. **Feature selection:** Recursive Feature Elimination (RFE) with sklearn `LogisticRegression` as the selector, reducing 18 features to 12 selected features.
-11. **Class weighting:** `weightCol` = ~4.0 for no-shows (minority), 1.0 for shows (majority). Ratio derived from training-set counts.
+8. **Patient no-show history:** Four point-in-time features (`prior_appointments`, `prior_no_shows`, `prior_no_show_ratio`, `has_history`) computed per patient on the bronze table (which retains `PatientId`), counting only strictly earlier appointment days — no same-day or future leakage. Cold-start patients get zeros with `has_history` = 0.
+9. **Vector assembly:** All features assembled into a `features` vector column.
+10. **Min-Max scaling:** `MinMaxScaler` fit on training data only, applied to all three splits.
+11. **Feature selection:** Recursive Feature Elimination (RFE) with sklearn `LogisticRegression` as the selector, reducing 22 features to 12 selected features.
+12. **Class weighting:** `weightCol` = ~3.95 for no-shows (minority), 1.0 for shows (majority). Ratio derived from training-set counts.
 
-RFE-selected features (12): `Age`, `Scholarship`, `SMS_received`, `date_diff`, `Sched_month_cos`, `Sched_dayofyear_sin`, `Sched_dayofyear_cos`, `Appoi_month_sin`, `Appoi_month_cos`, `Appoi_dayofyear_sin`, `Appoi_dayofyear_cos`, `Neighborhood_te`
+RFE-selected features (12 of 22): `Age`, `SMS_received`, `date_diff`, `prior_appointments`, `prior_no_shows`, `Sched_month_cos`, `Sched_dayofyear_sin`, `Sched_dayofyear_cos`, `Appoi_month_sin`, `Appoi_dayofyear_sin`, `Appoi_dayofyear_cos`, `Neighborhood_te`
 
 
 #### Training Hyperparameters
@@ -145,9 +147,9 @@ RFE-selected features (12): `Age`, `Scholarship`, `SMS_received`, `date_diff`, `
 <!-- This section provides information about throughput, start/end time, checkpoint size if relevant, etc. -->
 
 - **Compute:** Databricks Serverless CPU (Spark Connect)
-- **Training time:** <5 minutes (3-fold CV with 10-tree RF on 85K rows)
+- **Training time:** ~13 minutes (3-fold CV, 12-combination grid, 100-tree RF on 64K rows)
 - **Feature engineering:** ~2 minutes (target encoding + scaling + RFE)
-- **Model size:** Lightweight (~10 trees, depth ≤10)
+- **Model size:** Lightweight (100 trees, depth ≤15)
 
 ## Evaluation
 
@@ -159,7 +161,7 @@ RFE-selected features (12): `Age`, `Scholarship`, `SMS_received`, `date_diff`, `
 
 <!-- This should link to a Dataset Card if possible. -->
 
-Held-out 20% test split (21,590 rows) from the original 110,527 records. No overlap with training data (seed=42 random split).
+Held-out 20% test split (21,590 rows) from the 106,987 preprocessed records (60/20/20 split, seed=42, performed before any fitted transforms). No overlap with training data.
 
 #### Factors
 
@@ -180,29 +182,33 @@ Evaluation was conducted on the overall test set. No subgroup disaggregation by 
 
 | Metric | Random Forest (Champion) | Logistic Regression (Baseline) |
 | --- | --- | --- |
-| PR-AUC | 0.9143 | 0.8837 |
-| F1 (weighted) | 0.7496 | 0.7446 |
-| Best Threshold | 0.30 | 0.55 |
-| No-show Recall (Class 0) | — | 0.3121 |
+| PR-AUC | 0.9167 | 0.8879 |
+| ROC-AUC | 0.7354 | 0.6839 |
+| Accuracy | 0.7816 | 0.7504 |
+| F1 (weighted) | 0.7561 | 0.7430 |
+| Best Threshold | 0.35 | 0.55 |
+| No-show Recall (Class 0) | 0.2393 | 0.3133 |
+| No-show Precision (Class 0) | 0.4315 | 0.3659 |
+| No-show F1 (Class 0) | 0.3079 | 0.3376 |
 
-The Random Forest model outperforms the Logistic Regression baseline on both PR-AUC (+0.0306) and weighted F1 (+0.0050). The Logistic Regression baseline's no-show recall of 0.31 indicates that ~69% of actual no-shows go undetected at the tuned threshold — the Random Forest model partially addresses this through its ability to capture non-linear feature interactions.
+All metrics are from the Nov 12, 2026 22-feature retrain (RF v22 and LR v18, both `@champion`, same held-out test set). The Random Forest outperforms the Logistic Regression baseline on PR-AUC (+0.0288) and weighted F1 (+0.0131). At the tuned threshold of 0.35 the RF catches ~24% of actual no-shows (recall 0.2393, precision 0.4315, no-show F1 0.3079) — test confusion matrix (rows = actual show / no-show, columns = predicted show / no-show): 15,825 / 1,382 / 3,334 / 1,049. The patient-history features carry signal: RFE kept `prior_appointments` and `prior_no_shows` for both models.
 
 #### Summary
 
-The Random Forest champion model achieves strong PR-AUC (0.9143) and weighted F1 (0.7496) on the held-out test set. The tuned threshold of 0.30 optimises for the F1/precision trade-off appropriate to the asymmetric cost structure (false positives are more costly than false negatives). The model is suitable for pilot deployment with human-in-the-loop oversight.
+The Random Forest champion (v22) achieves strong PR-AUC (0.9167) and weighted F1 (0.7561) on the held-out test set. The tuned threshold of 0.35 optimises for the F1/precision trade-off appropriate to the asymmetric cost structure (false positives are more costly than false negatives). The model is suitable for pilot deployment with human-in-the-loop oversight.
 
 ## Model Examination [optional]
 
 <!-- Relevant interpretability work for the model goes here -->
 
-Feature importance was examined during development using the Random Forest's built-in `featureImportances` output. The strongest predictors are expected to be:
+Feature importance from the champion's (v22) built-in `featureImportances` output, over its 12 selected features:
 
-- **`date_diff`** (days between scheduling and appointment): longer lead time correlates with higher no-show rate — known to be a strong signal.
-- **`Age`**: certain age groups show different attendance patterns.
-- **`SMS_received`**: patients who received SMS reminders show lower no-show rates.
-- **`Neighborhood_te`**: target-encoded neighbourhood captures geographic/socioeconomic attendance patterns.
+- **`date_diff`** — 0.342: by far the strongest predictor; longer lead time correlates with higher no-show rate.
+- **`Age`** — 0.145: certain age groups show different attendance patterns.
+- **`Neighborhood_te`** — 0.120: target-encoded neighbourhood captures geographic/socioeconomic attendance patterns.
+- Mid-tier: `Sched_dayofyear_cos` 0.082, `Sched_dayofyear_sin` 0.068, `Appoi_dayofyear_sin` 0.053, `Appoi_dayofyear_cos` 0.053, `prior_appointments` 0.052, `prior_no_shows` 0.036, `SMS_received` 0.027, `Sched_month_cos` 0.016, `Appoi_month_sin` 0.005.
 
-No formal SHAP or LIME analysis was conducted. This is a candidate for future interpretability work.
+The patient-history features (`prior_appointments` + `prior_no_shows`) sum to ~0.09 of total importance despite being derived only from past behaviour. No formal SHAP or LIME analysis was conducted; this is a candidate for future interpretability work.
 
 ## Environmental Impact
 
@@ -224,8 +230,8 @@ Carbon emissions can be estimated using the [Machine Learning Impact calculator]
 - **Objective:** Binary classification — minimise weighted impurity (Gini) across ensemble of decision trees.
 - **Input:** Vector of 12 RFE-selected, min-max scaled features.
 - **Output:** `prediction` (0 = no-show, 1 = showed up), `probability` (vector of [P(no-show), P(show)]), `rawPrediction`.
-- **Class weighting:** `weightCol` ~4.0 for minority (no-show), 1.0 for majority (show).
-- **Threshold:** 0.30 (applied post-training via F1 sweep, not a native RF hyperparameter).
+- **Class weighting:** `weightCol` ~3.95 for minority (no-show), 1.0 for majority (show).
+- **Threshold:** 0.35 (applied post-training via F1 sweep, not a native RF hyperparameter).
 
 ### Compute Infrastructure
 
@@ -242,8 +248,8 @@ AWS-backed serverless CPU instances. No GPU required for this tree-based model.
 - **scikit-learn:** `TargetEncoder`, `RFE`, `LogisticRegression` (feature selection / baseline)
 - **MLflow:** Experiment tracking, model registry, champion alias promotion
 - **Experiment path:** See `mlflow.experiment_path` in `config.yaml`
-- **Registered model:** `noshows_random_forest` with `@champion` alias
-- **Training hyperparameters:** numTrees=10, maxDepth=10, minInstancesPerNode=20, featureSubsetStrategy=sqrt, CrossValidator 3-fold, parallelism=4, F1 evaluator
+- **Registered model:** `noshows_random_forest` (v22) with `@champion` alias
+- **Training hyperparameters (v22 best of grid):** numTrees=100, maxDepth=15 (grid {10, 12, 15}), minInstancesPerNode=5 (grid {5, 20}), featureSubsetStrategy=sqrt (grid {sqrt, log2}), CrossValidator 3-fold, parallelism=4, F1 (weighted) evaluator
 
 ## Glossary [optional]
 

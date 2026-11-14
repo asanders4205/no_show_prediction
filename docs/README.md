@@ -6,10 +6,10 @@ An end-to-end ML pipeline on Databricks that predicts whether patients will atte
 
 | Metric | Random Forest (Champion) | Logistic Regression (Baseline) |
 |---|---|---|
-| PR-AUC | 0.9157 | 0.8837 |
-| No-show Recall | 0.2578 | 0.3121 |
-| No-show Precision | 0.4330 | 0.3705 |
-| F1 (weighted) | 0.7584 | 0.7446 |
+| PR-AUC | 0.9167 | 0.8879 |
+| No-show Recall | 0.2393 | 0.3133 |
+| No-show Precision | 0.4315 | 0.3659 |
+| F1 (weighted) | 0.7561 | 0.7430 |
 
 PR-AUC measures how well the model ranks no-show risk across all thresholds, recall measures the fraction of actual no-shows caught, precision measures how many flagged patients truly miss, and F1 balances precision and recall.
 
@@ -37,9 +37,9 @@ PR-AUC measures how well the model ranks no-show risk across all thresholds, rec
 | `ScheduledDay` | Date | Date appointment was booked |
 | `AppointmentDay` | Date | Date of the appointment |
 
-**Derived feature:** `date_diff` = days between `ScheduledDay` and `AppointmentDay`
+**Derived features:** `date_diff` = days between `ScheduledDay` and `AppointmentDay`, plus 4 point-in-time patient-history features (`prior_appointments`, `prior_no_shows`, `prior_no_show_ratio`, `has_history`) computed from `PatientId` on the bronze table using only strictly earlier appointment days (no future leakage)
 
-`PatientId` and `AppointmentID` are dropped before training.
+`PatientId` and `AppointmentID` are dropped before training (`PatientId` lives only in bronze and is used solely to derive the history features).
 
 ---
 
@@ -57,6 +57,7 @@ Data Preprocessing
         * Add unique ID for primary key
 Feature Engineering
         * Compute date_diff (days between scheduling and appointment)
+        * Compute point-in-time patient no-show history on bronze (4 features, pre-split)
         * Determine feature importance
         * 60/20/20 train/validation/test split (seed=42, performed before any encoder or scaler fitting)
         * Class imbalance handling (weightCol ≈ 4:1 for minority class)
@@ -68,7 +69,7 @@ Feature Engineering
         * Apply class weights to handle imbalance (ratio of Maj to Min classes)
 Model training
         * Select N most relevant features using Recursive Feature Elimination
-        * (LR: 7 features, RF: 12 features)
+        * (LR: 7 of 22 features, RF: 12 of 22 features)
 Model training with CrossValidator (3-fold)
         * LR: AUC evaluator, RF: F1 (weighted) evaluator
         * Threshold tuned via F1 sweep post-training
@@ -78,11 +79,12 @@ Promote best version to @champion alias
 ### Feature engineering details
 
 - **`date_diff`** — Days between scheduling and appointment date. Strong predictor — longer lead time correlates with higher no-show rate. Known at prediction time (no leakage).
+- **Patient no-show history** — 4 point-in-time features (`prior_appointments`, `prior_no_shows`, `prior_no_show_ratio`, `has_history`) computed per patient on the bronze table with a window ordered by appointment day that counts only strictly earlier days — same-day appointments and future outcomes never leak. Cold-start patients (first appointment) get zeros with `has_history` = 0. Derived before the split, like the cyclical date features.
 - **Cyclical date encoding** — month and day-of-year are each encoded as a sin/cos pair so the model sees the circular nature of calendar time (e.g. Dec 31 and Jan 1 are adjacent). Applied to both `ScheduledDay` and `AppointmentDay`, yielding 8 derived features.
 - **Categorical encoding**:
-  - `Neighborhood` (~81 values) → **TargetEncoder** (sklearn) — replaces each neighbourhood with its mean no-show rate on the training set. Prevents OHE explosion and captures geographic patterns. Fit on training set only to avoid leakage.
+  - `Neighborhood` (~81 values) → **TargetEncoder** (sklearn) — replaces each neighbourhood with its mean show-up rate on the training set (fit on `Showed_up`). Prevents OHE explosion and captures geographic patterns. Fit on training set only to avoid leakage.
   - `Gender` (2 values) → `StringIndexer` + `OneHotEncoder` (drop-last).
-- **Numerical features (passed through as doubles):** `Age`, `Scholarship`, `Hypertension`, `Diabetes`, `Alcoholism`, `Handicap`, `SMS_received`, plus `date_diff` and all 8 cyclical date features.
+- **Numerical features (passed through as doubles):** `Age`, `Scholarship`, `Hypertension`, `Diabetes`, `Alcoholism`, `Handicap`, `SMS_received`, plus `date_diff`, the 4 patient-history features, and all 8 cyclical date features — 22 vector dimensions in total.
 - Cyclical encoding is performed inline in the feature engineering module (`features/engineering.py`) using Spark column operations (`sin`, `cos`, `month`, `dayofyear`).
 
 ### Class imbalance handling
@@ -109,21 +111,22 @@ The pipeline trains two models with the same train/test split, same features, an
 
 ### Results
 
-Random Forest figures below are from the most recent training run (Nov 7, 2026 job run of `models/random_forest`, ~17 min on serverless), which registered `noshows_random_forest` version 20 and holds the `@champion` alias. Threshold 0.35 was tuned on the validation set, not test. Logistic Regression figures predate the Oct 2026 leakage fix and do not reflect the current registry state — refresh pending.
+All figures below are from the Nov 12, 2026 pipeline retrain on the 22-feature dataset (patient-history features added). Random Forest registered `noshows_random_forest` **v22** (@champion) and Logistic Regression registered `noshows_logistic_regression` **v18** (@champion); both runs logged full params and metrics to MLflow. Thresholds (RF 0.35, LR 0.55) were tuned on the validation set, not test. LR now trains on the full 64,176-row training set — the earlier 48k-row randomSplit carve-out produced a degenerate always-predicts-show model (no-show F1 0.0036), fixed in v18.
 
 | Metric | Random Forest (Champion) | Logistic Regression (Baseline) |
 |---|---|---|
-| PR-AUC | 0.9157 | 0.8837 |
-| F1 (weighted) | 0.7584 | 0.7446 |
+| PR-AUC | 0.9167 | 0.8879 |
+| F1 (weighted) | 0.7561 | 0.7430 |
 | Best Threshold | 0.35 | 0.55 |
-| No-show Recall (Class 0) | 0.2578 | 0.3121 |
-| No-show Precision (Class 0) | 0.4330 | 0.3705 |
+| No-show Recall (Class 0) | 0.2393 | 0.3133 |
+| No-show Precision (Class 0) | 0.4315 | 0.3659 |
+| No-show F1 (Class 0) | 0.3079 | 0.3376 |
 
-The Random Forest outperforms the Logistic Regression baseline on both PR-AUC (+0.0320) and weighted F1 (+0.0038). At the F1-optimal threshold the RF model catches ~26% of actual no-shows (recall 0.2578, precision 0.4330, no-show F1 0.3232) — non-linear feature interactions buy ranking quality (PR-AUC), while a lower decision threshold can trade precision for more caught no-shows. Other test metrics: ROC-AUC 0.7326, accuracy 0.7808. Test confusion matrix at threshold 0.35 (rows = actual Showed_up 1 / 0, columns = predicted 1 / 0): 15,727 / 1,480 / 3,253 / 1,130.
+The Random Forest outperforms the Logistic Regression baseline on PR-AUC (+0.0288) and weighted F1 (+0.0131). At the F1-optimal threshold the RF model catches ~24% of actual no-shows (recall 0.2393, precision 0.4315, no-show F1 0.3079) — non-linear feature interactions buy ranking quality (PR-AUC), while a lower decision threshold can trade precision for more caught no-shows. The patient-history features carry signal: RFE kept `prior_appointments` and `prior_no_shows` for both models. Other test metrics: ROC-AUC 0.7354, accuracy 0.7816. Test confusion matrix at threshold 0.35 (rows = actual Showed_up 1 / 0, columns = predicted 1 / 0): 15,825 / 1,382 / 3,334 / 1,049. LR v18 test confusion matrix at threshold 0.55: 14,828 / 2,379 / 3,010 / 1,373 (best params: maxIter 100, regParam 0.001).
 
 ### Evaluation Plots
 
-**ROC and Precision-Recall Curves** — both models compared against baselines. The RF model's higher PR-AUC (0.9157 vs 0.8837) reflects better ranking of no-show risk across all thresholds.
+**ROC and Precision-Recall Curves** — both models compared against baselines. The RF model's higher PR-AUC (0.9167 vs 0.8879) reflects better ranking of no-show risk across all thresholds. PR curves are computed with showed-up (label 1) as the positive class, matching how the logged PR-AUC metric is calculated.
 
 ![ROC and PR curves](images/roc_pr_curves.png)
 
@@ -131,7 +134,7 @@ The Random Forest outperforms the Logistic Regression baseline on both PR-AUC (+
 
 ![Confusion matrices at tuned thresholds](images/confusion_matrices.png)
 
-**Random Forest Feature Importance** — Gini importance of the 12 RFE-selected features. `date_diff` dominates (0.594), confirming that lead time between booking and appointment is the strongest no-show predictor.
+**Random Forest Feature Importance** — Gini importance of the 12 RFE-selected features. `date_diff` dominates (0.342), followed by `Age` (0.145) and `Neighborhood_te` (0.120); the patient-history features (`prior_appointments` + `prior_no_shows`) together carry ~0.09 — confirming that lead time and patient history are the strongest no-show predictors.
 
 ![RF feature importance](images/rf_feature_importance.png)
 
@@ -191,6 +194,7 @@ no_show_prediction/
 └── docs/
     ├── README.md                 # This file
     ├── design.md                  # Business context, metric choice, cost asymmetry
+    ├── HANDOFF.md                  # Project state, pending work, gotchas — start here for onboarding
     ├── model_card_random_forest.md    # RF model card
     ├── model_card_logistic_regression.md  # LR model card
     └── requirements.txt           # Dependencies not pre-installed on Databricks
