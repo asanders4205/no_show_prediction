@@ -6,12 +6,13 @@ An end-to-end ML pipeline on Databricks that predicts whether patients will atte
 
 | Metric | Random Forest (Champion) | Logistic Regression (Baseline) |
 |---|---|---|
-| PR-AUC | 0.9167 | 0.8879 |
+| PR-AUC (showed-up class) | 0.9167 | 0.8879 |
+| PR-AUC (no-show class) | 0.3938 | 0.3317 |
 | No-show Recall | 0.2393 | 0.3133 |
 | No-show Precision | 0.4315 | 0.3659 |
 | F1 (weighted) | 0.7561 | 0.7430 |
 
-PR-AUC measures how well the model ranks no-show risk across all thresholds, recall measures the fraction of actual no-shows caught, precision measures how many flagged patients truly miss, and F1 balances precision and recall.
+PR-AUC measures ranking quality across all thresholds. Two framings are reported: the logged PR-AUC treats showed-up (label 1, 79.7% of the test set) as the positive class, so its random-classifier baseline is 0.797; the no-show-class PR-AUC treats no-show (20.3% prevalence, baseline 0.203) as positive and is the more demanding, business-relevant measure — the champion ranks no-show risk at 0.3938 average precision, roughly double the baseline. Recall measures the fraction of actual no-shows caught, precision measures how many flagged patients truly miss, and F1 balances precision and recall.
 
 ---
 
@@ -115,18 +116,19 @@ All figures below are from the Nov 12, 2026 pipeline retrain on the 22-feature d
 
 | Metric | Random Forest (Champion) | Logistic Regression (Baseline) |
 |---|---|---|
-| PR-AUC | 0.9167 | 0.8879 |
+| PR-AUC (showed-up class) | 0.9167 | 0.8879 |
+| PR-AUC (no-show class) | 0.3938 | 0.3317 |
 | F1 (weighted) | 0.7561 | 0.7430 |
 | Best Threshold | 0.35 | 0.55 |
 | No-show Recall (Class 0) | 0.2393 | 0.3133 |
 | No-show Precision (Class 0) | 0.4315 | 0.3659 |
 | No-show F1 (Class 0) | 0.3079 | 0.3376 |
 
-The Random Forest outperforms the Logistic Regression baseline on PR-AUC (+0.0288) and weighted F1 (+0.0131). At the F1-optimal threshold the RF model catches ~24% of actual no-shows (recall 0.2393, precision 0.4315, no-show F1 0.3079) — non-linear feature interactions buy ranking quality (PR-AUC), while a lower decision threshold can trade precision for more caught no-shows. The patient-history features carry signal: RFE kept `prior_appointments` and `prior_no_shows` for both models. Other test metrics: ROC-AUC 0.7354, accuracy 0.7816. Test confusion matrix at threshold 0.35 (rows = actual Showed_up 1 / 0, columns = predicted 1 / 0): 15,825 / 1,382 / 3,334 / 1,049. LR v18 test confusion matrix at threshold 0.55: 14,828 / 2,379 / 3,010 / 1,373 (best params: maxIter 100, regParam 0.001).
+The Random Forest outperforms the Logistic Regression baseline on PR-AUC (+0.0288), no-show-class PR-AUC (0.3938 vs 0.3317, baseline 0.203), and weighted F1 (+0.0131). At the F1-optimal threshold the RF model catches ~24% of actual no-shows (recall 0.2393, precision 0.4315, no-show F1 0.3079) — non-linear feature interactions buy ranking quality (PR-AUC), while a lower decision threshold can trade precision for more caught no-shows. The patient-history features carry signal: RFE kept `prior_appointments` and `prior_no_shows` for both models. Other test metrics: ROC-AUC 0.7354, accuracy 0.7816. Test confusion matrix at threshold 0.35 (rows = actual Showed_up 1 / 0, columns = predicted 1 / 0): 15,825 / 1,382 / 3,334 / 1,049. LR v18 test confusion matrix at threshold 0.55: 14,828 / 2,379 / 3,010 / 1,373 (best params: maxIter 100, regParam 0.001).
 
 ### Evaluation Plots
 
-**ROC and Precision-Recall Curves** — both models compared against baselines. The RF model's higher PR-AUC (0.9167 vs 0.8879) reflects better ranking of no-show risk across all thresholds. PR curves are computed with showed-up (label 1) as the positive class, matching how the logged PR-AUC metric is calculated.
+**ROC and Precision-Recall Curves** — both models compared against baselines. The RF model's higher PR-AUC (0.9167 vs 0.8879) reflects better ranking of no-show risk across all thresholds. PR curves are computed with showed-up (label 1) as the positive class, matching how the logged PR-AUC metric is calculated; the complementary no-show-class average precision (RF 0.3938, LR 0.3317) appears in the Results table above.
 
 ![ROC and PR curves](images/roc_pr_curves.png)
 

@@ -7,6 +7,7 @@ Clinics lose billable slots and waste clinical resources when patients miss appo
 **PR-AUC (Average Precision)** — primary model comparison metric
 * Summarizes the precision-recall curve into a single threshold-independent metric. Unlike ROC-AUC, it is sensitive to class imbalance and is more informative when the positive class is rare or when the business cost of false positives vs. false negatives is asymmetric.
 * These models must be sensitive to class imbalance as the vast majority of patients in the dataset as well as in a real clinical setting show up to appointments.
+* Framing note: the logged PR-AUC is computed with showed-up (label 1, the ~80% majority) as the positive class, so its random-classifier baseline is 0.797. The complementary no-show-class PR-AUC (positive = no-show, ~20% prevalence, baseline 0.203) is the more demanding, business-relevant ranking measure: current champions score RF 0.3938, LR 0.3317.
 
 **F1 (weighted)** — CrossValidator evaluator for Random Forest
 * Balances precision and recall across both classes, weighted by class frequency. Chosen over AUC for RF because it aligns CV optimization with the business objective (catching no-shows without excessive false alarms).

@@ -66,7 +66,7 @@ The model could be embedded in a clinic scheduling system to flag appointments a
 
 - **Geographic bias:** The training data originates from a single Brazilian public health system. Appointment attendance patterns are influenced by local infrastructure, culture, and economics. Results may not generalise to other regions or healthcare systems.
 - **Socioeconomic bias:** The `Scholarship` feature (Bolsa Familia welfare enrolment) and `Neighborhood` target encoding encode socioeconomic information. The model may learn patterns that disproportionately flag patients from lower-income areas as no-show risks.
-- **Class imbalance:** The dataset is ~80% show / ~20% no-show. While `weightCol` mitigates this during training, the model may still underperform on the no-show class in absolute terms (no-show recall is a known limitation — see Results).
+- **Class imbalance:** The dataset is ~80% show / ~20% no-show. While `weightCol` mitigates this during training, the model may still underperform on the no-show class in absolute terms (no-show recall and the no-show-class PR-AUC of 0.3938 vs a 0.203 baseline are known limitations — see Results).
 - **False positive cost:** A false positive (patient predicted as no-show who would have attended) carries a high cost: the appointment slot may be given away, the patient may face administrative burden or no-show fees, and the clinic may suffer reputational harm. The model is tuned with a threshold of 0.35 to optimise for F1 and precision, reducing but not eliminating this risk.
 - **Data vintage:** The dataset is a static snapshot. Seasonal trends, policy changes, or post-pandemic behaviour shifts are not captured.
 - **No protected-attribute audit:** The model has not been formally audited for fairness across age, gender, or neighbourhood subgroups.
@@ -173,7 +173,7 @@ Evaluation was conducted on the overall test set. No subgroup disaggregation by 
 
 <!-- These are the evaluation metrics being used, ideally with a description of why. -->
 
-- **PR-AUC (Average Precision):** Summarises the precision-recall curve into a single threshold-independent metric. Chosen over ROC-AUC because it is sensitive to class imbalance and the positive class (no-show) is the minority (~20%). This is the primary model comparison metric.
+- **PR-AUC (Average Precision):** Summarises the precision-recall curve into a single threshold-independent metric. Chosen over ROC-AUC for sensitivity to class imbalance. Two framings are reported: the logged PR-AUC treats showed-up (label 1, ~80% of the test set) as the positive class, so its random-classifier baseline is 0.797; the **no-show-class PR-AUC** (positive = no-show, ~20% prevalence, baseline 0.203) is reported alongside it and is the more demanding, business-relevant ranking metric. This is the primary model comparison metric.
 - **F1 Score (weighted):** Harmonic mean of precision and recall, weighted by class support. Used as the CrossValidator evaluation metric.
 - **Precision:** Emphasised because false positives (patient predicted as no-show who actually attends) carry high operational and reputational cost.
 - **Recall (no-show class):** Tracks sensitivity — the proportion of actual no-shows the model successfully identifies.
@@ -182,7 +182,8 @@ Evaluation was conducted on the overall test set. No subgroup disaggregation by 
 
 | Metric | Random Forest (Champion) | Logistic Regression (Baseline) |
 | --- | --- | --- |
-| PR-AUC | 0.9167 | 0.8879 |
+| PR-AUC (showed-up class) | 0.9167 | 0.8879 |
+| PR-AUC (no-show class) | 0.3938 | 0.3317 |
 | ROC-AUC | 0.7354 | 0.6839 |
 | Accuracy | 0.7816 | 0.7504 |
 | F1 (weighted) | 0.7561 | 0.7430 |
@@ -191,11 +192,11 @@ Evaluation was conducted on the overall test set. No subgroup disaggregation by 
 | No-show Precision (Class 0) | 0.4315 | 0.3659 |
 | No-show F1 (Class 0) | 0.3079 | 0.3376 |
 
-All metrics are from the Nov 12, 2026 22-feature retrain (RF v22 and LR v18, both `@champion`, same held-out test set). The Random Forest outperforms the Logistic Regression baseline on PR-AUC (+0.0288) and weighted F1 (+0.0131). At the tuned threshold of 0.35 the RF catches ~24% of actual no-shows (recall 0.2393, precision 0.4315, no-show F1 0.3079) — test confusion matrix (rows = actual show / no-show, columns = predicted show / no-show): 15,825 / 1,382 / 3,334 / 1,049. The patient-history features carry signal: RFE kept `prior_appointments` and `prior_no_shows` for both models.
+All metrics are from the Nov 12, 2026 22-feature retrain (RF v22 and LR v18, both `@champion`, same held-out test set). The Random Forest outperforms the Logistic Regression baseline on PR-AUC (+0.0288), no-show-class PR-AUC (0.3938 vs 0.3317, baseline 0.203), and weighted F1 (+0.0131). At the tuned threshold of 0.35 the RF catches ~24% of actual no-shows (recall 0.2393, precision 0.4315, no-show F1 0.3079) — test confusion matrix (rows = actual show / no-show, columns = predicted show / no-show): 15,825 / 1,382 / 3,334 / 1,049. The patient-history features carry signal: RFE kept `prior_appointments` and `prior_no_shows` for both models.
 
 #### Summary
 
-The Random Forest champion (v22) achieves strong PR-AUC (0.9167) and weighted F1 (0.7561) on the held-out test set. The tuned threshold of 0.35 optimises for the F1/precision trade-off appropriate to the asymmetric cost structure (false positives are more costly than false negatives). The model is suitable for pilot deployment with human-in-the-loop oversight.
+The Random Forest champion (v22) achieves strong PR-AUC (0.9167; no-show-class PR-AUC 0.3938) and weighted F1 (0.7561) on the held-out test set. The tuned threshold of 0.35 optimises for the F1/precision trade-off appropriate to the asymmetric cost structure (false positives are more costly than false negatives). The model is suitable for pilot deployment with human-in-the-loop oversight.
 
 ## Model Examination [optional]
 
@@ -257,7 +258,7 @@ AWS-backed serverless CPU instances. No GPU required for this tree-based model.
 
 - **No-show:** A patient who did not attend their scheduled appointment (`Showed_up = 0`).
 - **Showed up:** A patient who attended their scheduled appointment (`Showed_up = 1`).
-- **PR-AUC (Average Precision):** Area under the Precision-Recall curve. More informative than ROC-AUC for imbalanced datasets because it focuses on the minority (positive) class.
+- **PR-AUC (Average Precision):** Area under the Precision-Recall curve. More informative than ROC-AUC for imbalanced datasets because it focuses on the positive class. The logged PR-AUC uses showed-up (majority) as positive; the no-show-class PR-AUC (positive = the minority no-show class, baseline 0.203) is reported alongside it.
 - **date_diff:** Number of days between when the appointment was scheduled and the appointment date itself. Longer lead times correlate with higher no-show rates.
 - **Target encoding:** Replacing a categorical value (e.g., neighbourhood) with the mean of the target variable (no-show rate) for that category, computed from the training set only.
 - **Cyclical date encoding:** Representing calendar periods (month, day-of-year) as sine/cosine pairs so that the model understands the cyclic nature of time (e.g., December is close to January).

@@ -159,7 +159,7 @@ Evaluation was conducted on the overall test set. No subgroup disaggregation by 
 
 #### Metrics
 
-- **PR-AUC (Average Precision):** Summarises the precision-recall curve into a single threshold-independent metric. Chosen over ROC-AUC because it is sensitive to class imbalance and the positive class (no-show) is the minority (~20%). This is the primary model comparison metric.
+- **PR-AUC (Average Precision):** Summarises the precision-recall curve into a single threshold-independent metric. Chosen over ROC-AUC for sensitivity to class imbalance. Two framings are reported: the logged PR-AUC treats showed-up (label 1, ~80% of the test set) as the positive class, so its random-classifier baseline is 0.797; the **no-show-class PR-AUC** (positive = no-show, ~20% prevalence, baseline 0.203) is reported alongside it and is the more demanding, business-relevant ranking metric. This is the primary model comparison metric.
 - **F1 Score (weighted):** Harmonic mean of precision and recall, weighted by class support.
 - **Precision:** Emphasised because false positives (patient predicted as no-show who actually attends) carry high operational and reputational cost.
 - **Recall (no-show class):** Tracks sensitivity — the proportion of actual no-shows the model successfully identifies. This is the key weakness of the baseline model.
@@ -168,7 +168,8 @@ Evaluation was conducted on the overall test set. No subgroup disaggregation by 
 
 | Metric | Logistic Regression (Baseline) | Random Forest (Champion) |
 | --- | --- | --- |
-| PR-AUC | 0.8879 | 0.9167 |
+| PR-AUC (showed-up class) | 0.8879 | 0.9167 |
+| PR-AUC (no-show class) | 0.3317 | 0.3938 |
 | ROC-AUC | 0.6839 | 0.7354 |
 | Accuracy | 0.7504 | 0.7816 |
 | F1 (weighted) | 0.7430 | 0.7561 |
@@ -177,11 +178,11 @@ Evaluation was conducted on the overall test set. No subgroup disaggregation by 
 | No-show Precision (Class 0) | 0.3659 | 0.4315 |
 | No-show F1 (Class 0) | 0.3376 | 0.3079 |
 
-All metrics are from the Nov 12, 2026 22-feature retrain (LR v18 vs RF v22, both `@champion`, same held-out test set). The Logistic Regression baseline achieves solid PR-AUC (0.8879) and weighted F1 (0.7430), but trails the Random Forest champion on both metrics (PR-AUC −0.0288, F1 −0.0131). At the tuned threshold of 0.55 it identifies ~31% of actual no-shows (recall 0.3133, precision 0.3659) — test confusion matrix (rows = actual show / no-show, columns = predicted show / no-show): 14,828 / 2,379 / 3,010 / 1,373. Notably, the linear model achieves the better no-show F1 (0.3376 vs 0.3079) — its probabilities are better calibrated for precision on the minority class at the tuned threshold — while the RF leads on ranking quality (PR-AUC) and weighted F1. The linear model cannot capture non-linear feature interactions (e.g., the combined effect of long lead time and lack of SMS reminder).
+All metrics are from the Nov 12, 2026 22-feature retrain (LR v18 vs RF v22, both `@champion`, same held-out test set). The Logistic Regression baseline achieves solid PR-AUC (0.8879) and weighted F1 (0.7430), but trails the Random Forest champion on both metrics (PR-AUC −0.0288, F1 −0.0131) and on the no-show-class PR-AUC (0.3317 vs 0.3938, baseline 0.203). At the tuned threshold of 0.55 it identifies ~31% of actual no-shows (recall 0.3133, precision 0.3659) — test confusion matrix (rows = actual show / no-show, columns = predicted show / no-show): 14,828 / 2,379 / 3,010 / 1,373. Notably, the linear model achieves the better no-show F1 (0.3376 vs 0.3079) — its probabilities are better calibrated for precision on the minority class at the tuned threshold — while the RF leads on ranking quality (PR-AUC) and weighted F1. The linear model cannot capture non-linear feature interactions (e.g., the combined effect of long lead time and lack of SMS reminder).
 
 #### Summary
 
-The Logistic Regression baseline (v18) establishes a reasonable performance benchmark (PR-AUC 0.8879, F1 0.7430) but is limited by its linearity assumption and low no-show recall (0.3133). It is suitable as an interpretable reference model but should not be used as the primary production model. The Random Forest champion is recommended for deployment.
+The Logistic Regression baseline (v18) establishes a reasonable performance benchmark (PR-AUC 0.8879 — no-show-class PR-AUC 0.3317 — and F1 0.7430) but is limited by its linearity assumption and low no-show recall (0.3133). It is suitable as an interpretable reference model but should not be used as the primary production model. The Random Forest champion is recommended for deployment.
 
 ## Model Examination [optional]
 
@@ -241,7 +242,7 @@ AWS-backed serverless CPU instances. No GPU required for this linear model.
 
 - **No-show:** A patient who did not attend their scheduled appointment (`Showed_up = 0`).
 - **Showed up:** A patient who attended their scheduled appointment (`Showed_up = 1`).
-- **PR-AUC (Average Precision):** Area under the Precision-Recall curve. More informative than ROC-AUC for imbalanced datasets because it focuses on the minority (positive) class.
+- **PR-AUC (Average Precision):** Area under the Precision-Recall curve. More informative than ROC-AUC for imbalanced datasets because it focuses on the positive class. The logged PR-AUC uses showed-up (majority) as positive; the no-show-class PR-AUC (positive = the minority no-show class, baseline 0.203) is reported alongside it.
 - **date_diff:** Number of days between when the appointment was scheduled and the appointment date itself. Longer lead times correlate with higher no-show rates.
 - **Target encoding:** Replacing a categorical value (e.g., neighbourhood) with the mean of the target variable (no-show rate) for that category, computed from the training set only.
 - **Cyclical date encoding:** Representing calendar periods (month, day-of-year) as sine/cosine pairs so that the model understands the cyclic nature of time (e.g., December is close to January).
